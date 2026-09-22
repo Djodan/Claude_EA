@@ -1,0 +1,43 @@
+//@version=6
+indicator("DJ Trend - Claude", overlay = true, max_labels_count = 500)
+
+// ── Inputs ─────────────────────────────────────────────
+maType   = input.string("EMA", "Basis Type", options = ["EMA", "SMA", "HMA", "ALMA"])
+len      = input.int(34, "Basis Length", minval = 2)
+atrLen   = input.int(14, "ATR Length", minval = 1)
+sigMult  = input.float(0.5, "Signal Buffer (ATR x)", step = 0.1)
+
+// ── Core calc ──────────────────────────────────────────
+src   = hlc3
+emaV  = ta.ema(src, len)
+smaV  = ta.sma(src, len)
+hmaV  = ta.hma(src, len)
+almaV = ta.alma(src, len, 0.85, 6)
+basis = maType == "SMA" ? smaV : maType == "HMA" ? hmaV : maType == "ALMA" ? almaV : emaV
+atr   = ta.atr(atrLen)
+
+// Trend flips only when price clears the basis by a buffer (reduces chop)
+var int trend = 0
+if close > basis + sigMult * atr
+    trend := 1
+else if close < basis - sigMult * atr
+    trend := -1
+
+// Non-repainting: signals only print once the bar has closed
+buySig  = barstate.isconfirmed and trend == 1 and trend[1] != 1
+sellSig = barstate.isconfirmed and trend == -1 and trend[1] != -1
+
+// ── Signals ────────────────────────────────────────────
+if buySig
+    label.new(bar_index, low - atr, "BUY 🚀", style = label.style_label_up, color = #1e9e4a, textcolor = color.white, size = size.small)
+if sellSig
+    label.new(bar_index, high + atr, "SELL 😡", style = label.style_label_down, color = #e0151b, textcolor = color.white, size = size.small)
+
+// ── Alerts ─────────────────────────────────────────────
+alertcondition(buySig,  "Buy Signal",  "DJ Trend BUY on {{ticker}} @ {{close}}")
+alertcondition(sellSig, "Sell Signal", "DJ Trend SELL on {{ticker}} @ {{close}}")
+
+if buySig
+    alert("DJ Trend BUY on " + syminfo.ticker + " @ " + str.tostring(close), alert.freq_once_per_bar_close)
+if sellSig
+    alert("DJ Trend SELL on " + syminfo.ticker + " @ " + str.tostring(close), alert.freq_once_per_bar_close)
