@@ -24,7 +24,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.24"
+#define EA_VERSION "2.25"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -798,7 +798,7 @@ double OnTester()
       CTestReporter::WriteStrategyStats(g_symbol, (ENUM_TIMEFRAMES)_Period, (int)InpPreset, build, config, InpMagic, g_stratNames);
      }
    if(InpExportTrades && !MQLInfoInteger(MQL_OPTIMIZATION))
-      CTestReporter::WriteTrades(g_symbol, (ENUM_TIMEFRAMES)_Period, InpMagic, (int)InpPreset, GetPointer(g_excursions));
+      CTestReporter::WriteTrades(g_symbol, (ENUM_TIMEFRAMES)_Period, InpMagic, (int)InpPreset, GetPointer(g_excursions), g_testStart);
    return score;
   }
 //+------------------------------------------------------------------+

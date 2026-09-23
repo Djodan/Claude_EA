@@ -32,7 +32,7 @@ Maximise **risk-adjusted** profitability, not just net profit:
 | Filter | ADX (min, DI agree, rising) | ❌ R1 (min 20) |
 | Filter | Volatility regime (ATR / avg ATR) | ✅ R1 – tuning R2 |
 | Filter | MA slope (ATR units) | ❌ R1 (too strict) |
-| Filter | Trend MA (e.g. D1 EMA 50) | testing R11 |
+| Filter | Trend MA (e.g. D1 EMA 50) | ✅ R11 – fixes 2025 |
 | Guard | Session / weekdays | untested |
 | Guard | Max spread | untested |
 | Guard | Daily loss / target / max trades | untested |
@@ -40,7 +40,7 @@ Maximise **risk-adjusted** profitability, not just net profit:
 | Manage | Breakeven | ❌ R1 (1 ATR) · ≈ neutral R7 (1R on breakout) |
 | Manage | ATR trailing | ❌ R1 (2/2.5 ATR) – retry wider |
 | Manage | Time exit | untested |
-| Manage | News exit (close N min before) | testing R11 |
+| Manage | News exit (close N min before) | ✅ R11 – max loss < 1% |
 | Exit | SL/TP: ATR, points, R:R | ✅ SL 2 ATR R1 – tuning R2 |
 | Sizing | Fixed / risk % | fixed only so far |
 
@@ -356,6 +356,32 @@ Lesson: optimising on one year overfit the direction mix. Every change must now 
 Grid (10): D1 EMA length off / 50 / 100 / 150 / 200 × news exit off / 5 min.
 Run twice: 2026.01.01–09.21 and 2025.01.01–12.31.
 Accept a setting only if it improves 2025 a lot without breaking 2026, and max loss < 1% in both.
+
+**Results (only the default pass ran in each year: D1 EMA 50 + news exit 5 min):**
+
+| | 2025 v2.23 | **2025 v2.24** | 2026 v2.23 | **2026 v2.24** |
+|---|---|---|---|---|
+| Trades | 216 | 115 (all BUY) | 140 | 72 (34 B / 38 S) |
+| Net | +2,361 | **+10,013** | +27,062 | +13,204 |
+| PF | 1.04 | **1.47** | 2.15 | **2.44** |
+| DD % | 6.00 | **3.08** | 2.44 | 2.61 |
+| Max loss % | 1.074 ❌ | **0.905 ✅** | 0.899 | 0.899 ✅ |
+
+2026 by month (v2.24): all 9 months profitable (+0.2% … +3.9%).
+
+**Conclusions:** ✅ D1 EMA 50 trend filter + news exit make S2 pass BOTH years – first setup that
+survives both regimes. Cost: ~half the trades / $ in 2026. Accepted as the new baseline.
+
+### ⭐ Current best (v2.24 defaults) – robust across 2025 + 2026
+v2.23 best + D1 EMA 50 direction filter + close 5 min before high-impact USD news.
+2025: 115 tr, +10.0k, PF 1.47, DD 3.1% · 2026: 72 tr, +13.2k, PF 2.44, DD 2.6% · max loss ≤ 0.91%.
+
+---
+
+## Round 12 – trend filter TF/length, both years (v2.25)
+Grid (16): EMA 25–200 (step 25) × H4 / D1. Run on 2025 and 2026.
+Pick the setting with the best *worse-year* recovery (robustness first).
+v2.25: trade exports are now named `trades_<sym>_<tf>_P<preset>_<year>.csv`.
 
 **Results:** _pending_
 

@@ -171,12 +171,14 @@ public:
 
    //--- one row per closing deal of this EA (entry matched by position id)
    static void       WriteTrades(const string symbol, const ENUM_TIMEFRAMES tf, const ulong baseMagic, const int preset,
-                                 CExcursionTracker *tracker = NULL)
+                                 CExcursionTracker *tracker = NULL, const datetime from = 0)
      {
       if(!HistorySelect(0, TimeCurrent() + 86400))
          return;
       FolderCreate("ClaudeEA", FILE_COMMON);
-      string name = StringFormat("ClaudeEA\\trades_%s_%s_P%d.csv", symbol, StringSubstr(EnumToString(tf), 7), preset);
+      MqlDateTime f;
+      TimeToStruct(from, f);
+      string name = StringFormat("ClaudeEA\\trades_%s_%s_P%d_%04d.csv", symbol, StringSubstr(EnumToString(tf), 7), preset, f.year);
       int h = FileOpen(name, FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON, ',');
       if(h == INVALID_HANDLE)
         {
