@@ -28,7 +28,7 @@ public:
 
    virtual void      Manage(SPosition &pos)
      {
-      double atr = Atr();
+      double atr = Unit(pos);   // ATR or 1R, see UseR()
       if(atr <= 0.0 || pos.Profit() < m_startAtr * atr)
          return;
       double step = m_stepAtr * atr;

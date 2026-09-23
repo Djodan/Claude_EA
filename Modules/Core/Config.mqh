@@ -40,6 +40,7 @@ struct SExitSettings
    bool              useSessionClose;
    int               closeHour;
    int               closeMinute;
+   bool              unitR;                // BE / partial / trail thresholds in R instead of ATR
   };
 
 //--- settings every strategy has
@@ -143,12 +144,13 @@ string ExitSummary(const SStrategyCommon &s)
       r += " SHORT";
    if(s.exitOnFilteredFlip)
       r += " XF";
+   string u = s.exits.unitR ? "R" : "A";
    if(s.exits.usePartial)
-      r += StringFormat(" PART%.1f", s.exits.partialAtr);
+      r += StringFormat(" PART%.0f%%@%.2f%s", s.exits.partialPct, s.exits.partialAtr, u);
    if(s.exits.useBE)
-      r += StringFormat(" BE%.1f", s.exits.beTriggerAtr);
+      r += StringFormat(" BE%.2f%s", s.exits.beTriggerAtr, u);
    if(s.exits.useTrail)
-      r += StringFormat(" TRAIL%.1f/%.1f", s.exits.trailStartAtr, s.exits.trailDistAtr);
+      r += StringFormat(" TRAIL%.1f/%.1f%s", s.exits.trailStartAtr, s.exits.trailDistAtr, u);
    if(s.exits.useTimeExit)
       r += StringFormat(" TIME%d", s.exits.timeExitBars);
    if(s.exits.useSessionClose)
@@ -184,7 +186,7 @@ string ConfigSummary(const SEAConfig &c)
       s += StringFormat("P[%s %d/%d RSI%d %.0f/%.0f%s] ", TfName(c.pb.s.tf), c.pb.pb.fastLen, c.pb.pb.slowLen,
                         c.pb.pb.rsiLen, c.pb.pb.rsiLow, c.pb.pb.rsiHigh, ExitSummary(c.pb.s));
    if(c.risk.lotMode == LOT_RISK_PERCENT)
-      s += StringFormat("risk%.2f%%", c.risk.riskPercent);
+      s += StringFormat("risk%.2f%%", c.risk.riskPercent) + (c.risk.accountSize > 0.0 ? StringFormat(" cap%.0f", c.risk.accountSize) : "");
    else
       s += StringFormat("lots%.2f", c.risk.fixedLots);
    if(c.useNews)

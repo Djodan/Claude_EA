@@ -26,6 +26,7 @@ struct SPosition
    double             volume;
    datetime           openTime;
    double             price;     // price the position would close at (bid for buys, ask for sells)
+   double             risk;      // initial stop distance (1R) in price, 0 if unknown
    bool               closed;    // set once a module closes it fully
 
    //--- distance in price the position is in profit (negative = loss)
@@ -42,6 +43,7 @@ protected:
    ENUM_TIMEFRAMES   m_tf;
    CTrade           *m_trade;
    CAtrProvider     *m_atr;
+   bool              m_useR;      // thresholds in R multiples of the initial stop instead of ATR
 
    double            NormalizePrice(const double price) const
      {
@@ -53,6 +55,9 @@ protected:
      }
 
    double            Atr(void) const { return CheckPointer(m_atr) != POINTER_INVALID ? m_atr.Value() : 0.0; }
+
+   //--- distance unit for thresholds: 1R (initial stop distance) or ATR
+   double            Unit(const SPosition &pos) const { return m_useR ? pos.risk : Atr(); }
 
    //--- tighten the stop only; respects stops & freeze levels
    bool              ModifySL(SPosition &pos, const double target)
@@ -127,7 +132,7 @@ protected:
 
 public:
                      CPositionModule(const string name)
-      : m_name(name), m_symbol(""), m_magic(0), m_tf(PERIOD_CURRENT), m_trade(NULL), m_atr(NULL) {}
+      : m_name(name), m_symbol(""), m_magic(0), m_tf(PERIOD_CURRENT), m_trade(NULL), m_atr(NULL), m_useR(false) {}
    virtual          ~CPositionModule(void) {}
 
    virtual bool      Init(const string symbol, const ulong magic, const ENUM_TIMEFRAMES tf, CTrade *trade, CAtrProvider *atr)
@@ -144,6 +149,7 @@ public:
    virtual void      Manage(SPosition &pos) = 0;
 
    string            Name(void) const { return m_name; }
+   void              UseR(const bool useR) { m_useR = useR; }
   };
 
 #endif

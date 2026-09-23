@@ -16,6 +16,29 @@ private:
    CTrade            m_trade;
    string            m_symbol;
    ulong             m_magic;
+   ulong             m_riskIds[];    // position id -> initial stop distance (1R)
+   double            m_risk[];
+
+   double            InitialRisk(const ulong id, const double open, const double sl)
+     {
+      int n = ArraySize(m_riskIds);
+      for(int i = n - 1; i >= 0; i--)
+         if(m_riskIds[i] == id)
+            return m_risk[i];
+      if(sl <= 0.0)
+         return 0.0;
+      if(n >= 512)
+        {
+         ArrayRemove(m_riskIds, 0, 256);
+         ArrayRemove(m_risk, 0, 256);
+         n = ArraySize(m_riskIds);
+        }
+      ArrayResize(m_riskIds, n + 1);
+      ArrayResize(m_risk, n + 1);
+      m_riskIds[n] = id;
+      m_risk[n]    = MathAbs(open - sl);
+      return m_risk[n];
+     }
 
 public:
                      CPositionManager(void) : m_symbol(""), m_magic(0) {}
@@ -95,6 +118,7 @@ public:
          pos.price    = pos.type == POSITION_TYPE_BUY ? SymbolInfoDouble(m_symbol, SYMBOL_BID)
                                                       : SymbolInfoDouble(m_symbol, SYMBOL_ASK);
          pos.closed   = false;
+         pos.risk     = InitialRisk((ulong)PositionGetInteger(POSITION_IDENTIFIER), pos.open, pos.sl);
 
          for(int i = 0; i < ArraySize(m_modules) && !pos.closed; i++)
             m_modules[i].Manage(pos);

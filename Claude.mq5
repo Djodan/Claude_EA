@@ -23,7 +23,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.14"
+#define EA_VERSION "2.15"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: DJ Trend, session breakout and trend pullback with shared news/session/spread guards."
@@ -70,6 +70,7 @@ input ENUM_LOT_MODE      InpLotMode       = LOT_RISK_PERCENT; // Lot mode
 input double             InpFixedLots     = 0.10;           // Fixed lots
 input double             InpRiskPercent   = 0.8;            // Risk % per trade (prop rule: max loss 1%)
 input bool               InpAllowHedge    = false;          // Allow opposite positions (prop: no hedging)
+input double             InpAccountSize   = 100000;         // Account size cap for risk (prop size, 0 = off)
 
 input group "=== S1 Trend: DJ Trend flip ==="
 input bool               InpT_Enable      = true;           // Enable
@@ -114,7 +115,7 @@ input int                InpB_RangeStartM = 0;              // Range start minut
 input int                InpB_RangeEndH   = 9;              // Range end hour (server)
 input int                InpB_RangeEndM   = 0;              // Range end minute
 input int                InpB_TradeEndH   = 17;             // Last entry hour (server)
-input double             InpB_BufferAtr   = 0.2;            // Breakout buffer (ATR x)
+input double             InpB_BufferAtr   = 0.25;           // Breakout buffer (ATR x)
 input double             InpB_MinRangeAtr = 0.0;            // Min range width (ATR x, 0 = off)
 input double             InpB_MaxRangeAtr = 0.0;            // Max range width (ATR x, 0 = off)
 input int                InpB_AtrLen      = 14;             // ATR length
@@ -127,7 +128,11 @@ input double             InpB_TPAtr       = 4.0;            // TP ATR multiple
 input bool               InpB_EOD         = true;           // Close at session end
 input int                InpB_EODHour     = 23;             // Session end hour (server)
 input bool               InpB_UseBE       = false;          // Exit: breakeven
-input double             InpB_BETrigger   = 1.5;            // Exit: BE trigger (ATR x)
+input double             InpB_BETrigger   = 1.0;            // Exit: BE trigger (R)
+input double             InpB_BELock      = 0.05;           // Exit: BE lock beyond entry (R)
+input bool               InpB_UsePartial  = false;          // Exit: partial close
+input double             InpB_PartialR    = 1.0;            // Exit: partial at (R)
+input double             InpB_PartialPct  = 50.0;           // Exit: partial close %
 
 input group "=== S3 Pullback: EMA trend + RSI dip ==="
 input bool               InpP_Enable      = true;           // Enable
@@ -221,6 +226,7 @@ void DefaultExits(SExitSettings &e)
    e.useSessionClose = false;
    e.closeHour       = 23;
    e.closeMinute     = 0;
+   e.unitR           = false;
   }
 
 void DefaultTrade(STradeSettings &t, const ENUM_EA_TRADE_MODE mode)
@@ -315,8 +321,14 @@ void BuildConfig(SEAConfig &c)
    DefaultExits(c.brk.s.exits);
    c.brk.s.exits.useSessionClose = InpB_EOD;
    c.brk.s.exits.closeHour       = InpB_EODHour;
+   c.brk.s.exits.unitR           = true;
    c.brk.s.exits.useBE           = InpB_UseBE;
    c.brk.s.exits.beTriggerAtr    = InpB_BETrigger;
+   c.brk.s.exits.beLockAtr       = InpB_BELock;
+   c.brk.s.exits.usePartial      = InpB_UsePartial;
+   c.brk.s.exits.partialAtr      = InpB_PartialR;
+   c.brk.s.exits.partialPct      = InpB_PartialPct;
+   c.brk.s.exits.partialBE       = false;
 
    c.brk.brk.rangeStartHour = InpB_RangeStartH;
    c.brk.brk.rangeStartMin  = InpB_RangeStartM;
@@ -363,6 +375,7 @@ void BuildConfig(SEAConfig &c)
    c.risk.lotMode     = InpLotMode;
    c.risk.fixedLots   = InpFixedLots;
    c.risk.riskPercent = InpRiskPercent;
+   c.risk.accountSize = InpAccountSize;
 
    //--- guards
    c.useSession          = InpUseSession;
@@ -395,18 +408,21 @@ void AddExits(CStrategy *st, const SExitSettings &e)
      {
       CManagePartialClose *m = new CManagePartialClose();
       m.Configure(e.partialAtr, e.partialPct, e.partialBE);
+      m.UseR(e.unitR);
       st.AddPositionModule(m);
      }
    if(e.useBE)
      {
       CManageBreakeven *m = new CManageBreakeven();
       m.Configure(e.beTriggerAtr, e.beLockAtr);
+      m.UseR(e.unitR);
       st.AddPositionModule(m);
      }
    if(e.useTrail)
      {
       CManageTrailing *m = new CManageTrailing();
       m.Configure(e.trailStartAtr, e.trailDistAtr, e.trailStepAtr);
+      m.UseR(e.unitR);
       st.AddPositionModule(m);
      }
    if(e.useTimeExit)

@@ -215,6 +215,34 @@ v2.13: trade export adds 1R risk, MFE/MAE (price and R) and result in R per trad
 Grid (54): last entry 14/17/20 · EOD close 20/23 · buffer 0/0.2/0.5 ATR · range start 01/03/05.
 Hypotheses: earlier range start (01) best – full Asian range; last entry 17 (before late NY chop).
 
+**Results (54 passes, v2.14, 0.8% risk, real ticks?, $100k):**
+- Best: start 01, last entry 17, buffer 0.25, EOD 23 → 140 trades, +31,036, PF 2.15, DD 2.48%, rec 12.4.
+- Range start (median rec): 01 → 9.4 · 03 → 5.5 · 05 → 2.7 — the full Asian range matters most.
+- Last entry: 17 best rec (6.7); 14 highest PF but fewer trades; 20 adds weaker late trades.
+- Buffer 0–0.25 plateau; 0.5 slightly worse. EOD 23 > 20.
+- ⚠️ **max_loss_pct 1.00–1.04%** in almost every pass → breaks the prop 1% rule. Cause: risk % of
+  the *current* balance (grown to ~$127k) → $1,016 loss = 1.02% of the $100k start. Losses were
+  all ≈ -1.0R (no slippage problem).
+
+Trade analysis (single run, 142 trades, v2.13 1% risk): exits 107 EOD / 23 SL / 12 TP.
+EOD exits median +0.21R (71/107 winners). MFE ≥1R: 49 trades, ≥1.5R: 22, ≥2R: 9 → the 2R target
+is rarely reached; most profit comes from the EOD close.
+
+**Conclusions:** defaults confirmed (start 01, end 09, entries until 17, EOD 23); buffer → 0.25.
+
+---
+
+## v2.15 changes
+- `Account size` input (100,000): risk = 0.8% of min(balance, equity, account size) → max loss per
+  trade ≈ $800 regardless of profits (prop-safe; no compounding).
+- Exit modules can work in **R** (initial stop distance) instead of ATR; breakout uses R.
+  New breakout inputs: BE trigger/lock in R, partial close at R / %.
+
+## Round 7 – breakout exits in R (v2.15, M1)
+Grid (20): TP 1.0–3.0R (0.5) × breakeven at 1R on/off × partial 50% at 1R on/off.
+Hypotheses: since only 9/142 trades reach 2R, TP 1–1.5R or partial at 1R converts more of the
+MFE into profit; BE at 1R cuts the few reversals after +1R. Must keep max_loss_pct < 1.0.
+
 **Results:** _pending_
 
 Note: user's tester showed deposit $3,000 and "Every tick" – asked to keep $100k + real ticks

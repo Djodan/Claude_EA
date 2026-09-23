@@ -12,6 +12,7 @@ struct SRiskSettings
    ENUM_LOT_MODE     lotMode;
    double            fixedLots;
    double            riskPercent;
+   double            accountSize;    // cap for the sizing base, e.g. prop account size (0 = off)
   };
 
 class CRiskManager
@@ -68,6 +69,8 @@ public:
               {
                // size from the lower of balance and equity (prop rules usually measure against balance)
                double base = MathMin(AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY));
+               if(m_cfg.accountSize > 0.0)
+                  base = MathMin(base, m_cfg.accountSize);   // never risk more than x% of the starting size
                lots = base * m_cfg.riskPercent / 100.0 / lossPerLot;
               }
            }
