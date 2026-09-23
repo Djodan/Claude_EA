@@ -14,6 +14,7 @@
 #include "../Signals/Filters/FilterADX.mqh"
 #include "../Signals/Filters/FilterVolatility.mqh"
 #include "../Signals/Filters/FilterSlope.mqh"
+#include "../Signals/Filters/FilterTrendMA.mqh"
 #include "../Guards/GuardSession.mqh"
 #include "../Guards/GuardDailyLimits.mqh"
 #include "../Guards/GuardNews.mqh"
@@ -41,6 +42,7 @@ struct SExitSettings
    int               closeHour;
    int               closeMinute;
    bool              unitR;                // BE / partial / trail thresholds in R instead of ATR
+   int               newsExitMins;         // close positions N minutes before high-impact news (0 = off)
   };
 
 //--- settings every strategy has
@@ -75,6 +77,9 @@ struct SBreakoutConfig
    SStrategyCommon   s;
    SBreakoutSettings brk;
    bool              alignAsian;           // only trade in the direction price broke the Asian range
+   int               trendLen;             // higher-TF trend filter: MA length (0 = off)
+   ENUM_TIMEFRAMES   trendTF;
+   ENUM_BASIS_TYPE   trendType;
   };
 
 //--- S3: trend pullback
@@ -157,6 +162,8 @@ string ExitSummary(const SStrategyCommon &s)
       r += StringFormat(" TIME%d", s.exits.timeExitBars);
    if(s.exits.useSessionClose)
       r += StringFormat(" EOD%02d", s.exits.closeHour);
+   if(s.exits.newsExitMins > 0)
+      r += StringFormat(" NX%d", s.exits.newsExitMins);
    return r;
   }
 
@@ -168,7 +175,9 @@ string BreakoutSummary(const string tag, const SBreakoutConfig &b)
    return StringFormat("%s[%s %02d:%02d-%02d:%02d<%02d buf%.2f%s%s%s%s] ", tag, TfName(b.s.tf),
                        b.brk.rangeStartHour, b.brk.rangeStartMin, b.brk.rangeEndHour, b.brk.rangeEndMin,
                        b.brk.tradeEndHour, b.brk.bufferAtr, d1, b.brk.stopMode == BRK_STOP_MID ? " MID" : "",
-                       (b.brk.oneTradePerDay ? " 1/day" : " multi") + (b.alignAsian ? " ALIGN" : ""), ExitSummary(b.s));
+                       (b.brk.oneTradePerDay ? " 1/day" : " multi") + (b.alignAsian ? " ALIGN" : "") +
+                       (b.trendLen > 0 ? StringFormat(" TR%s/%s%d", TfName(b.trendTF), StringSubstr(EnumToString(b.trendType), 6), b.trendLen) : ""),
+                       ExitSummary(b.s));
   }
 
 //--- short text describing the active setup (for reports and the dashboard)

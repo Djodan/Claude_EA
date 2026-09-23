@@ -24,7 +24,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.23"
+#define EA_VERSION "2.24"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -43,6 +43,7 @@
 #include "Modules/Signals/Filters/FilterADX.mqh"
 #include "Modules/Signals/Filters/FilterVolatility.mqh"
 #include "Modules/Signals/Filters/FilterSlope.mqh"
+#include "Modules/Signals/Filters/FilterTrendMA.mqh"
 #include "Modules/Guards/GuardManager.mqh"
 #include "Modules/Guards/GuardSession.mqh"
 #include "Modules/Guards/GuardSpread.mqh"
@@ -53,6 +54,7 @@
 #include "Modules/Manage/ManagePartialClose.mqh"
 #include "Modules/Manage/ManageTimeExit.mqh"
 #include "Modules/Manage/ManageSessionClose.mqh"
+#include "Modules/Manage/ManageNewsExit.mqh"
 #include "Modules/Notify/AlertManager.mqh"
 #include "Modules/Visual/ChartDrawer.mqh"
 #include "Modules/Visual/Dashboard.mqh"
@@ -137,6 +139,10 @@ input double             InpB_BELock      = 0.05;           // Exit: BE lock bey
 input bool               InpB_UsePartial  = false;          // Exit: partial close
 input double             InpB_PartialR    = 1.0;            // Exit: partial at (R)
 input double             InpB_PartialPct  = 50.0;           // Exit: partial close %
+input int                InpB_TrendLen    = 50;             // Trend filter: MA length (0 = off)
+input ENUM_TIMEFRAMES    InpB_TrendTF     = PERIOD_D1;      // Trend filter: timeframe
+input ENUM_BASIS_TYPE    InpB_TrendType   = BASIS_EMA;      // Trend filter: MA type
+input int                InpB_NewsExit    = 5;              // Exit: close N min before high-impact news (0 = off)
 
 input group "=== S4 NY opening-range breakout ==="
 input bool               InpN_Enable      = false;          // Enable (R8/R9: no edge)
@@ -245,6 +251,7 @@ void DefaultExits(SExitSettings &e)
    e.closeHour       = 23;
    e.closeMinute     = 0;
    e.unitR           = false;
+   e.newsExitMins    = 0;
   }
 
 void DefaultTrade(STradeSettings &t, const ENUM_EA_TRADE_MODE mode)
@@ -362,6 +369,10 @@ void BuildConfig(SEAConfig &c)
    c.brk.brk.oneTradePerDay = InpB_OnePerDay;
    c.brk.brk.lookback       = 400;
    c.brk.alignAsian         = false;
+   c.brk.trendLen           = InpB_TrendLen;
+   c.brk.trendTF            = InpB_TrendTF;
+   c.brk.trendType          = InpB_TrendType;
+   c.brk.s.exits.newsExitMins = InpB_NewsExit;
    c.brk.brk.minRangeD1     = InpB_MinRangeD1;
    c.brk.brk.maxRangeD1     = InpB_MaxRangeD1;
 
@@ -388,6 +399,7 @@ void BuildConfig(SEAConfig &c)
    c.ny.brk.stopMode       = InpN_StopMode;
    c.ny.brk.oneTradePerDay = true;
    c.ny.alignAsian         = InpN_AlignAsian;
+   c.ny.trendLen           = 0;
 
    //--- S3 Pullback
    c.pb.s.enabled            = InpP_Enable;
@@ -482,6 +494,12 @@ void AddExits(CStrategy *st, const SExitSettings &e)
       m.Configure(e.closeHour, e.closeMinute);
       st.AddPositionModule(m);
      }
+   if(e.newsExitMins > 0)
+     {
+      CManageNewsExit *m = new CManageNewsExit();
+      m.Configure(g_cfg.news, e.newsExitMins);
+      st.AddPositionModule(m);
+     }
   }
 
 bool StartStrategy(CStrategy *st, const int id, const SStrategyCommon &s)
@@ -555,6 +573,17 @@ bool BuildBreakout(const SBreakoutConfig &c, const int id)
       asian.Configure(a);
       asian.Name("AsianBias");
       st.AddSignal(asian, ROLE_FILTER);
+     }
+   if(c.trendLen > 0)
+     {
+      SFilterTrendMASettings tr;
+      tr.maType   = c.trendType;
+      tr.maLen    = c.trendLen;
+      tr.lookback = 300;
+      CFilterTrendMA *f = new CFilterTrendMA();
+      f.Configure(tr);
+      f.Timeframe(c.trendTF);
+      st.AddSignal(f, ROLE_FILTER);
      }
    return StartStrategy(st, id, c.s);
   }

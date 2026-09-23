@@ -32,6 +32,7 @@ Maximise **risk-adjusted** profitability, not just net profit:
 | Filter | ADX (min, DI agree, rising) | ❌ R1 (min 20) |
 | Filter | Volatility regime (ATR / avg ATR) | ✅ R1 – tuning R2 |
 | Filter | MA slope (ATR units) | ❌ R1 (too strict) |
+| Filter | Trend MA (e.g. D1 EMA 50) | testing R11 |
 | Guard | Session / weekdays | untested |
 | Guard | Max spread | untested |
 | Guard | Daily loss / target / max trades | untested |
@@ -39,6 +40,7 @@ Maximise **risk-adjusted** profitability, not just net profit:
 | Manage | Breakeven | ❌ R1 (1 ATR) · ≈ neutral R7 (1R on breakout) |
 | Manage | ATR trailing | ❌ R1 (2/2.5 ATR) – retry wider |
 | Manage | Time exit | untested |
+| Manage | News exit (close N min before) | testing R11 |
 | Exit | SL/TP: ATR, points, R:R | ✅ SL 2 ATR R1 – tuning R2 |
 | Sizing | Fixed / risk % | fixed only so far |
 
@@ -324,6 +326,36 @@ max loss 0.90%**, every month profitable.
 Single run, no optimisation, same defaults, 2025.01.01–2025.12.31. Calendar re-exported from
 2024.12.01 so the news guard covers the year.
 Pass criteria: PF > 1.4, max loss < 1%, no month worse than -3%, DD < 6%.
+
+**Results: ❌ FAILED.** 216 trades, +2,361, PF 1.04, win 48%, DD 6.00%, **max loss 1.074%** (breach).
+
+| | 2026 (in-sample) | 2025 (out-of-sample) |
+|---|---|---|
+| PF | 2.15 | 1.04 |
+| BUY PF / SELL PF | 1.70 / 2.72 | **1.46 / 0.67** |
+| Months losing | 0 / 9 | 5 / 12 (Feb, Jun, Jul, Nov, Dec) |
+| Narrowest range quartile | PF 3.11 | PF 0.75 (reversed) |
+
+Diagnosis:
+1. **Direction is regime-dependent.** 2025 = strong gold bull (sells lost), 2026 = crash (sells won).
+   The strategy has no view of the higher-TF trend.
+2. **Max-loss breach from news on an OPEN position**: 2025.08.22 SELL stopped at -1.35R at 17:00
+   (Powell, Jackson Hole). Other > 1R losses also on US data days. The news guard only blocks entries.
+3. Range-width effects flip between years → range filters would be curve-fitting. Not used.
+Lesson: optimising on one year overfit the direction mix. Every change must now be checked on
+**both 2025 and 2026**.
+
+---
+
+## v2.24 changes
+- `FilterTrendMA`: close vs MA on its own TF (default D1 EMA 50) as S2 filter – buys only above,
+  sells only below.
+- `ManageNewsExit`: closes open positions N minutes (default 5) before high-impact USD news.
+
+## Round 11 – trend filter + news exit, tested on BOTH years (v2.24)
+Grid (10): D1 EMA length off / 50 / 100 / 150 / 200 × news exit off / 5 min.
+Run twice: 2026.01.01–09.21 and 2025.01.01–12.31.
+Accept a setting only if it improves 2025 a lot without breaking 2026, and max loss < 1% in both.
 
 **Results:** _pending_
 
