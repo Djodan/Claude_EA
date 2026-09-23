@@ -26,7 +26,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.30"
+#define EA_VERSION "2.31"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -188,7 +188,7 @@ input int                InpNewsImportance= 3;              // Min importance (1
 input int                InpNewsBefore    = 30;             // Minutes before event
 input int                InpNewsAfter     = 30;             // Minutes after event
 input string             InpNewsExclude   = "Crude Oil";    // Ignore events containing (comma-separated)
-input bool               InpNewsExport    = true;           // Export calendar when run on a live chart
+input bool               InpNewsExport    = true;           // Export calendar on a live chart (refreshed every 6 h)
 input datetime           InpNewsFrom      = D'2024.12.01';  // Export from
 
 input group "=== Guard: Session / Spread / Daily ==="
@@ -228,6 +228,9 @@ CAlertManager    g_alerts;
 CChartDrawer     g_drawer;
 CDashboard       g_dashboard;
 CExcursionTracker g_excursions;
+CGuardNews      *g_newsGuard = NULL;   // owned by g_guards; kept for health checks
+datetime         g_lastExport = 0;
+string           g_healthPrinted = "";  // last health report written to the journal
 string           g_symbol;
 datetime         g_testStart;
 string           g_stratNames[] = {"Trend", "Breakout", "Pullback", "BreakoutNY"};   // index = id - 1
@@ -608,6 +611,7 @@ bool RegisterGuards(const SEAConfig &c)
       CGuardNews *g = new CGuardNews();
       g.Configure(c.news);
       g_guards.Add(g);
+      g_newsGuard = g;
      }
    if(c.useSession)
      {
@@ -658,12 +662,147 @@ void AppendLine(string &dst[], const string line)
    dst[n] = line;
   }
 
+//+------------------------------------------------------------------+
+//| Health checks: anything missing or wrong shows on the dashboard  |
+//| (red = problem, orange = warning) and is written to the journal. |
+//+------------------------------------------------------------------+
+#define HEALTH_OK    clrLimeGreen
+#define HEALTH_WARN  clrOrange
+#define HEALTH_ERROR clrTomato
+
+void AddHealth(string &txt[], color &clr[], const color c, const string s)
+  {
+   int n = ArraySize(txt);
+   ArrayResize(txt, n + 1);
+   ArrayResize(clr, n + 1);
+   txt[n] = s;
+   clr[n] = c;
+  }
+
+void CheckHealth(string &txt[], color &clr[])
+  {
+   ArrayResize(txt, 0);
+   ArrayResize(clr, 0);
+   bool tester = (bool)MQLInfoInteger(MQL_TESTER);
+
+   //--- trading permissions (live)
+   if(!tester)
+     {
+      if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED))
+         AddHealth(txt, clr, HEALTH_ERROR, "Algo Trading is OFF - no trades will be placed");
+      if(!AccountInfoInteger(ACCOUNT_TRADE_EXPERT))
+         AddHealth(txt, clr, HEALTH_ERROR, "Account does not allow EA trading");
+      if(!TerminalInfoInteger(TERMINAL_CONNECTED))
+         AddHealth(txt, clr, HEALTH_ERROR, "Terminal not connected to the broker");
+     }
+
+   //--- timezone
+   string tz;
+   if(!CTimeZone::Check(tz))
+      AddHealth(txt, clr, HEALTH_ERROR, "Timezone mismatch: " + tz + " - fix 'Broker server timezone'");
+
+   //--- symbol / chart
+   string sym = g_symbol;
+   StringToUpper(sym);
+   if(StringFind(sym, "XAU") < 0 && StringFind(sym, "GOLD") < 0)
+      AddHealth(txt, clr, HEALTH_WARN, "Symbol " + g_symbol + " - EA is tuned for XAUUSD");
+   if(_Period != PERIOD_M1)
+      AddHealth(txt, clr, HEALTH_WARN, "Chart is " + TfName((ENUM_TIMEFRAMES)_Period) + " - EA is tuned for M1");
+
+   //--- news calendar
+   if(g_cfg.useNews || g_cfg.brk.s.exits.newsExitMins > 0)
+     {
+      if(CheckPointer(g_newsGuard) == POINTER_INVALID)
+         AddHealth(txt, clr, HEALTH_WARN, "News exit is on but the news guard is off - enable 'Block entries around news'");
+      else
+        {
+         g_newsGuard.CanOpen();                               // reloads the file if it changed
+         datetime nowUtc = CTimeZone::ServerToUtc(TimeCurrent());
+         if(!g_newsGuard.FileFound())
+            AddHealth(txt, clr, HEALTH_ERROR, "News file NOT FOUND (Common\\Files\\" + CALENDAR_FILE +
+                      ") - attach the EA to a live chart to export it");
+         else
+            if(g_newsGuard.Events() == 0)
+               AddHealth(txt, clr, HEALTH_ERROR, "News file has no " + g_cfg.news.currencies + " events - re-export");
+            else
+              {
+               if(g_newsGuard.LastEvent() < nowUtc + 2 * 86400)
+                  AddHealth(txt, clr, tester ? HEALTH_WARN : HEALTH_ERROR, "News file ends " +
+                            TimeToString(CTimeZone::UtcToServer(g_newsGuard.LastEvent()), TIME_DATE) +
+                            " - no protection after that" + (tester ? " (re-export)" : " (auto re-export every 6 h)"));
+               if(g_newsGuard.FirstEvent() > nowUtc)
+                  AddHealth(txt, clr, HEALTH_WARN, "News file starts " +
+                            TimeToString(CTimeZone::UtcToServer(g_newsGuard.FirstEvent()), TIME_DATE) +
+                            " - earlier dates unprotected (lower 'Export from')");
+              }
+        }
+     }
+
+   //--- strategies
+   for(int k = 0; k < ArraySize(g_strategies); k++)
+     {
+      if(!g_strategies[k].Ready())
+         AddHealth(txt, clr, HEALTH_WARN, g_strategies[k].Name() + ": waiting for price history");
+      string issue = g_strategies[k].LastIssue();
+      if(issue != "")
+         AddHealth(txt, clr, HEALTH_ERROR, g_strategies[k].Name() + ": " + issue);
+     }
+
+   //--- risk summary (always shown)
+   double base = MathMin(AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY));
+   if(g_cfg.risk.accountSize > 0.0)
+      base = MathMin(base, g_cfg.risk.accountSize);
+   if(g_cfg.risk.lotMode == LOT_RISK_PERCENT)
+     {
+      if(g_cfg.risk.riskPercent >= 1.0)
+         AddHealth(txt, clr, HEALTH_WARN, StringFormat("Risk %.2f%% per trade - no slippage buffer under a 1%% loss rule",
+                                                       g_cfg.risk.riskPercent));
+      AddHealth(txt, clr, HEALTH_OK, StringFormat("Risk %.2f%% = %.0f %s per trade, %s", g_cfg.risk.riskPercent,
+                                                  base * g_cfg.risk.riskPercent / 100.0, AccountInfoString(ACCOUNT_CURRENCY),
+                                                  InpAllowHedge ? "hedging allowed" : "no hedging"));
+     }
+   if(ArraySize(txt) == 1 && clr[0] == HEALTH_OK)
+      txt[0] = "All checks OK. " + txt[0];
+  }
+
+//--- write new/changed problems to the journal (also shows them in backtests)
+void LogHealth(const string &txt[], const color &clr[])
+  {
+   string report = "";
+   for(int i = 0; i < ArraySize(txt); i++)
+      if(clr[i] != HEALTH_OK)
+         report += txt[i] + "\n";
+   if(report == g_healthPrinted)
+      return;
+   g_healthPrinted = report;
+   for(int i = 0; i < ArraySize(txt); i++)
+      if(clr[i] != HEALTH_OK)
+         PrintFormat("HEALTH %s: %s", clr[i] == HEALTH_ERROR ? "PROBLEM" : "WARNING", txt[i]);
+  }
+
 void UpdateDashboard(void)
   {
+   // without a dashboard (e.g. non-visual backtests) only log health once per hour
+   static datetime lastHealth = 0;
+   if(!g_dashboard.Enabled() && TimeCurrent() - lastHealth < 3600)
+      return;
+   lastHealth = TimeCurrent();
+   string htxt[];
+   color  hclr[];
+   CheckHealth(htxt, hclr);
+   LogHealth(htxt, hclr);
    if(!g_dashboard.Enabled())
       return;
    string lines[], part[];
+   color  colours[];
    AppendLine(lines, StringFormat("Claude XAUUSD EA v%s (build %s)  %s  preset %d", EA_VERSION, EA_BUILD, g_symbol, (int)InpPreset));
+   AppendLine(lines, "Health:");
+   for(int i = 0; i < ArraySize(htxt); i++)
+     {
+      AppendLine(lines, "  " + htxt[i]);
+      ArrayResize(colours, ArraySize(lines));
+      colours[ArraySize(lines) - 1] = hclr[i];
+     }
    for(int k = 0; k < ArraySize(g_strategies); k++)
      {
       g_strategies[k].Statuses(part);
@@ -677,7 +816,14 @@ void UpdateDashboard(void)
       for(int i = 0; i < ArraySize(part); i++)
          AppendLine(lines, "  " + part[i]);
      }
-   g_dashboard.Show(lines);
+   int n = ArraySize(colours);
+   ArrayResize(colours, ArraySize(lines));
+   for(int i = n; i < ArraySize(colours); i++)
+      colours[i] = clrNONE;
+   for(int i = 0; i < n; i++)
+      if(colours[i] == 0)
+         colours[i] = clrNONE;
+   g_dashboard.Show(lines, colours);
    ChartRedraw(0);
   }
 
@@ -707,7 +853,10 @@ int OnInit()
    PrintFormat("Claude EA v%s build %s: preset %d -> %s", EA_VERSION, EA_BUILD, (int)InpPreset, ConfigSummary(g_cfg));
 
    if(InpNewsExport && !MQLInfoInteger(MQL_TESTER))
-      ExportCalendar(InpNewsFrom, TimeCurrent() + 14 * 86400);
+     {
+      ExportCalendar(InpNewsFrom, TimeCurrent() + 21 * 86400);
+      g_lastExport = TimeCurrent();
+     }
 
    string prefix = "CLD_" + IntegerToString((long)InpMagic) + "_";
    SDrawSettings draw;
@@ -774,6 +923,12 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
+   // keep the news calendar covering the coming weeks on a live chart
+   if(InpNewsExport && !MQLInfoInteger(MQL_TESTER) && TimeCurrent() - g_lastExport >= 6 * 3600)
+     {
+      ExportCalendar(InpNewsFrom, TimeCurrent() + 21 * 86400);
+      g_lastExport = TimeCurrent();
+     }
    g_excursions.OnTick();
    g_guards.OnTick();
    bool anyFired = false;

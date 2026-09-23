@@ -118,6 +118,8 @@ public:
      }
 
    string            Name(void)  const { return m_name; }
+   bool              Ready(void)       { return m_signals.AllReady(); }
+   string            LastIssue(void) const { return m_trader.LastIssue(); }
    ulong             Magic(void) const { return m_magic; }
    bool              TradingEnabled(void) const { return m_trader.Enabled(); }
   };

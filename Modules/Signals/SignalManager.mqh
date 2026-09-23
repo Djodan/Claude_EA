@@ -149,6 +149,14 @@ public:
       return n;
      }
 
+   bool              AllReady(void)
+     {
+      for(int i = 0; i < ArraySize(m_modules); i++)
+         if(!m_modules[i].Ready())
+            return false;
+      return ArraySize(m_modules) > 0;
+     }
+
    int               Total(void) const { return ArraySize(m_modules); }
    CSignalModule    *At(const int i)   { return (i >= 0 && i < ArraySize(m_modules)) ? m_modules[i] : NULL; }
   };

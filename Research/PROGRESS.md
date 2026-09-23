@@ -430,3 +430,14 @@ D1 EMA 50 weaker in 2026 (rec 4.9 / median D1 3.6). Max loss 0.899% everywhere.
   bars start at 00:00 UK (and may include a small Sunday bar) → the D1 EMA 50 trend filter can differ
   slightly; re-backtest on the UK broker's data before going live.
 - Set files: `best_2026(_UK).set`, `best_2025_2026(_UK).set`.
+
+## v2.31 – health checks / transferability
+- Dashboard "Health" section (green OK / orange warning / red problem), also written to the journal
+  as `HEALTH PROBLEM|WARNING: …` (once per change; hourly check in non-visual backtests):
+  Algo Trading off, account disallows EAs, disconnected, timezone mismatch, non-gold symbol,
+  non-M1 chart, news file missing / empty / ending within 2 days / starting after the test date,
+  strategy waiting for history, last trade error, risk summary (% and money per trade).
+- Live: news calendar re-exported every 6 h (now → +21 days) and all news guards / news exits
+  reload automatically → future events always covered.
+- Risk: in risk-% mode a trade whose correct size is below the broker's minimum lot is now
+  **skipped** (previously rounded UP to the minimum → could exceed the 1% loss rule).

@@ -32,6 +32,11 @@ private:
    string            m_names[];
    int               m_count;
    int               m_idx;          // first event that may still matter (time only moves forward)
+   bool              m_fileFound;
+   datetime          m_firstEvent;   // UTC
+   datetime          m_lastEvent;    // UTC
+   int               m_version;      // file version this instance loaded
+   static int        s_fileVersion;  // bumped by CalendarExport after each export
 
    bool              Excluded(const string ev) const
      {
@@ -50,9 +55,14 @@ private:
 
    bool              Load(void)
      {
-      m_count = 0;
+      m_count      = 0;
+      m_idx        = 0;
+      m_firstEvent = 0;
+      m_lastEvent  = 0;
+      m_version    = s_fileVersion;
       int h = FileOpen(CALENDAR_FILE, FILE_READ | FILE_CSV | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ, ',');
-      if(h == INVALID_HANDLE)
+      m_fileFound = (h != INVALID_HANDLE);
+      if(!m_fileFound)
          return false;
       // header: time_utc,currency,importance,event
       for(int k = 0; k < 4 && !FileIsEnding(h); k++)
@@ -71,6 +81,10 @@ private:
          ArrayResize(m_names, m_count + 1, 256);
          m_times[m_count] = StringToTime(t);
          m_names[m_count] = cur + " " + ev;
+         if(m_firstEvent == 0 || m_times[m_count] < m_firstEvent)
+            m_firstEvent = m_times[m_count];
+         if(m_times[m_count] > m_lastEvent)
+            m_lastEvent = m_times[m_count];
          m_count++;
         }
       FileClose(h);
@@ -78,7 +92,7 @@ private:
      }
 
 public:
-                     CGuardNews(void) : CGuard("News"), m_count(0), m_idx(0)
+                     CGuardNews(void) : CGuard("News"), m_count(0), m_idx(0), m_fileFound(false), m_firstEvent(0), m_lastEvent(0), m_version(-1)
      {
       m_cfg.currencies    = "USD";
       m_cfg.minImportance = 3;
@@ -89,6 +103,10 @@ public:
 
    void              Configure(const SGuardNewsSettings &cfg) { m_cfg = cfg; }
    int               Events(void) const { return m_count; }
+   bool              FileFound(void) const { return m_fileFound; }
+   datetime          FirstEvent(void) const { return m_firstEvent; }   // UTC
+   datetime          LastEvent(void) const { return m_lastEvent; }     // UTC
+   static void       FileChanged(void) { s_fileVersion++; }
 
    virtual bool      Init(const string symbol, const ulong magic)
      {
@@ -104,6 +122,8 @@ public:
 
    virtual bool      CanOpen(void)
      {
+      if(m_version != s_fileVersion)          // a fresh export was written - reload it
+         Load();
       if(m_count == 0)
         {
          m_status = "no calendar data";
@@ -128,6 +148,8 @@ public:
       return true;
      }
   };
+
+int CGuardNews::s_fileVersion = 0;
 
 #endif
 //+------------------------------------------------------------------+

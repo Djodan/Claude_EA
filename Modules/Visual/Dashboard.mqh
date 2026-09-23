@@ -39,6 +39,13 @@ public:
 
    void              Show(const string &lines[])
      {
+      color none[];
+      Show(lines, none);
+     }
+
+   //--- colours[i] overrides the colour of line i (clrNONE = default)
+   void              Show(const string &lines[], const color &colours[])
+     {
       if(!m_enabled)
          return;
       int n       = ArraySize(lines);
@@ -80,7 +87,8 @@ public:
          ObjectSetInteger(0, name, OBJPROP_XDISTANCE, m_x + 10);
          ObjectSetInteger(0, name, OBJPROP_YDISTANCE, m_y + 6 + i * lineH);
          ObjectSetInteger(0, name, OBJPROP_FONTSIZE, m_fontSize);
-         ObjectSetInteger(0, name, OBJPROP_COLOR, i == 0 ? clrGold : m_textColor);
+         color c = (i < ArraySize(colours) && colours[i] != clrNONE) ? colours[i] : (i == 0 ? clrGold : m_textColor);
+         ObjectSetInteger(0, name, OBJPROP_COLOR, c);
          ObjectSetString(0, name, OBJPROP_TEXT, lines[i]);
         }
       for(int i = n; i < m_lines; i++)   // remove lines no longer used

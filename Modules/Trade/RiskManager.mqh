@@ -20,6 +20,7 @@ class CRiskManager
 private:
    string            m_symbol;
    SRiskSettings     m_cfg;
+   string            m_issue;        // why the last calculation returned 0
 
 public:
    void              Init(const string symbol, const SRiskSettings &cfg)
@@ -46,8 +47,11 @@ public:
      }
 
    //--- lots for an order at 'entry' with stop 'sl' (sl = 0 means no stop)
-   double            Calculate(const ENUM_ORDER_TYPE type, const double entry, const double sl) const
+   string            LastIssue(void) const { return m_issue; }
+
+   double            Calculate(const ENUM_ORDER_TYPE type, const double entry, const double sl)
      {
+      m_issue = "";
       double lots = m_cfg.fixedLots;
 
       if(m_cfg.lotMode == LOT_RISK_PERCENT)
@@ -72,6 +76,14 @@ public:
                if(m_cfg.accountSize > 0.0)
                   base = MathMin(base, m_cfg.accountSize);   // never risk more than x% of the starting size
                lots = base * m_cfg.riskPercent / 100.0 / lossPerLot;
+               double minV = SymbolInfoDouble(m_symbol, SYMBOL_VOLUME_MIN);
+               if(lots < minV - 1e-9)
+                 {
+                  // rounding up to the minimum lot would risk more than allowed (prop rule)
+                  m_issue = StringFormat("stop too wide: %.2f%% risk needs %.3f lots < min %.2f - trade skipped",
+                                         m_cfg.riskPercent, lots, minV);
+                  return 0.0;
+                 }
               }
            }
         }
@@ -82,7 +94,10 @@ public:
         {
          double maxLots = AccountInfoDouble(ACCOUNT_MARGIN_FREE) * 0.95 / marginPerLot;
          if(lots > maxLots)
+           {
             lots = maxLots;
+            m_issue = "size reduced by free margin";
+           }
         }
 
       return NormalizeVolume(lots);

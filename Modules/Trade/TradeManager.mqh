@@ -36,6 +36,15 @@ private:
    CTrade            m_trade;
    CRiskManager     *m_risk;
    CGuardManager    *m_guards;
+   string            m_issue;        // last trading problem (empty = none)
+   datetime          m_issueTime;
+
+   void              Issue(const string text)
+     {
+      m_issue     = text;
+      m_issueTime = TimeCurrent();
+      Print("TradeManager: " + text);
+     }
 
    double            NormalizePrice(const double price) const
      {
@@ -115,7 +124,7 @@ private:
       double lots  = m_risk.Calculate(type, entry, sl);
       if(lots <= 0.0)
         {
-         Print("TradeManager: calculated volume is zero - order skipped");
+         Issue(m_risk.LastIssue() != "" ? m_risk.LastIssue() : "calculated volume is zero - order skipped");
          return false;
         }
 
@@ -123,17 +132,18 @@ private:
                       : m_trade.Sell(lots, m_symbol, 0.0, sl, tp, m_cfg.comment);
       if(!ok || (m_trade.ResultRetcode() != TRADE_RETCODE_DONE && m_trade.ResultRetcode() != TRADE_RETCODE_PLACED))
         {
-         PrintFormat("TradeManager: %s %.2f failed, retcode %u (%s)", SignalDirToString(sig.dir), lots,
-                     m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription());
+         Issue(StringFormat("%s %.2f failed, retcode %u (%s)", SignalDirToString(sig.dir), lots,
+                            m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription()));
          return false;
         }
+      m_issue = "";
       PrintFormat("TradeManager: %s %.2f %s @ %s  SL %s  TP %s", SignalDirToString(sig.dir), lots, m_symbol,
                   DoubleToString(m_trade.ResultPrice(), _Digits), DoubleToString(sl, _Digits), DoubleToString(tp, _Digits));
       return true;
      }
 
 public:
-                     CTradeManager(void) : m_symbol(""), m_risk(NULL), m_guards(NULL) {}
+                     CTradeManager(void) : m_symbol(""), m_risk(NULL), m_guards(NULL), m_issue(""), m_issueTime(0) {}
 
    //--- guards is optional (NULL = no guards)
    bool              Init(const string symbol, const STradeSettings &cfg, CRiskManager *risk, CGuardManager *guards = NULL)
@@ -155,6 +165,7 @@ public:
      }
 
    bool              Enabled(void) const { return m_cfg.mode != EA_TRADE_OFF; }
+   string            LastIssue(void) const { return m_issue == "" ? "" : TimeToString(m_issueTime, TIME_DATE | TIME_MINUTES) + " " + m_issue; }
 
    //--- positions owned by this EA on this symbol (type < 0 = both directions)
    int               CountPositions(const int type = -1) const
@@ -227,7 +238,7 @@ public:
          return;
       if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED))
         {
-         Print("TradeManager: algo trading is disabled - signal not traded");
+         Issue("algo trading disabled - " + SignalDirToString(sig.dir) + " signal not traded");
          return;
         }
 

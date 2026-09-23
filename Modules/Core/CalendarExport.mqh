@@ -48,6 +48,7 @@ bool ExportCalendar(const datetime from, const datetime to)
       written++;
      }
    FileClose(h);
+   CGuardNews::FileChanged();          // all news guards / news exits reload on their next check
    PrintFormat("CalendarExport: %d events %s - %s written to Common\\Files\\%s", written,
                TimeToString(from, TIME_DATE), TimeToString(to, TIME_DATE), CALENDAR_FILE);
    return true;
