@@ -404,3 +404,13 @@ for comparability ($3k with 1% risk hits the 0.01-lot floor → real risk > 1%).
 - Slope filter: evaluate a few bars after the flip, or lower threshold – low priority.
 - Long-only variants for each strategy (gold long bias).
 - Out-of-sample check on the previous year and a second symbol.
+
+**Results so far (2026 only – 40 passes; 2025 run pending):** broad plateau, H4–H12 × EMA 75–200 all
+PF 2.4–2.6, rec 5.0–5.5. Best 2026: **H6 EMA 150** – 73 tr, +14,800, PF 2.62, DD 2.61%, rec 5.54.
+D1 EMA 50 weaker in 2026 (rec 4.9 / median D1 3.6). Max loss 0.899% everywhere.
+
+### Saved configurations (Research/sets, also in Profiles/Tester)
+- `best_2026.set` – S2 with **no trend filter, no news exit** (= v2.23 best): 2026 +27,062, PF 2.15,
+  DD 2.44%, max loss 0.90%. ⚠️ fails 2025 (PF 1.04, max loss 1.07%).
+- `best_2025_2026.set` – S2 + **D1 EMA 50 + news exit 5 min** (only config validated on both years):
+  2025 +10,013 PF 1.47 DD 3.08% · 2026 +13,204 PF 2.44 DD 2.61% · max loss ≤ 0.91%.
