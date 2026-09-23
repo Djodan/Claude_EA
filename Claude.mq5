@@ -26,7 +26,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.31"
+#define EA_VERSION "2.32"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -73,7 +73,7 @@ input group "=== General ==="
 input ENUM_SERVER_TZ     InpServerTZ      = TZ_NY_CLOSE;    // Broker server timezone (UK broker = TZ_UK)
 input ENUM_EA_PRESET     InpPreset        = PRESET_BREAKOUT; // Preset (0 = use inputs below)
 input ulong              InpMagic         = 20260900;       // Base magic (strategies use +1, +2, +3)
-input int                InpDeviation     = 50;             // Max slippage (points)
+input double             InpMaxSlippage   = 0.50;           // Max slippage (price, e.g. 0.50 = $0.50 on gold)
 input ENUM_LOT_MODE      InpLotMode       = LOT_RISK_PERCENT; // Lot mode
 input double             InpFixedLots     = 0.10;           // Fixed lots
 input double             InpRiskPercent   = 0.8;            // Risk % per trade (prop rule: max loss 1%)
@@ -196,7 +196,7 @@ input bool               InpUseSession    = false;          // Session filter (r
 input int                InpSessStartH    = 9;              // Start hour
 input int                InpSessEndH      = 22;             // End hour
 input bool               InpTradeFri      = true;           // Trade Fridays
-input int                InpMaxSpread     = 60;             // Max spread points (0 = off)
+input double             InpMaxSpread     = 0.60;           // Max spread (price, e.g. 0.60 = $0.60 on gold; 0 = off)
 input bool               InpUseDaily      = false;          // Daily limits
 input double             InpDailyMaxLoss  = 3.0;            // Max daily loss %
 input int                InpDailyMaxTrades= 0;              // Max trades per day (0 = off)
@@ -274,7 +274,7 @@ void DefaultTrade(STradeSettings &t, const ENUM_EA_TRADE_MODE mode)
    t.tpPoints        = 0;
    t.tpRR            = 2.0;
    t.magic           = InpMagic;
-   t.deviation       = InpDeviation;
+   t.deviation       = (int)MathRound(InpMaxSlippage / _Point);   // price -> broker points
    t.comment         = "";
    t.allowHedge      = InpAllowHedge;
   }
@@ -619,7 +619,7 @@ bool RegisterGuards(const SEAConfig &c)
       g.Configure(c.session);
       g_guards.Add(g);
      }
-   if(c.maxSpread > 0)
+   if(c.maxSpread > 0.0)
      {
       CGuardSpread *g = new CGuardSpread();
       g.Configure(c.maxSpread);
@@ -701,6 +701,12 @@ void CheckHealth(string &txt[], color &clr[])
    if(!CTimeZone::Check(tz))
       AddHealth(txt, clr, HEALTH_ERROR, "Timezone mismatch: " + tz + " - fix 'Broker server timezone'");
 
+   //--- account size cap vs real account
+   double bal = AccountInfoDouble(ACCOUNT_BALANCE);
+   if(g_cfg.risk.lotMode == LOT_RISK_PERCENT && g_cfg.risk.accountSize > 0.0 && bal > g_cfg.risk.accountSize * 1.2)
+      AddHealth(txt, clr, HEALTH_WARN, StringFormat("Balance %.0f is above 'Account size cap' %.0f - risk is capped at the smaller size",
+                                                    bal, g_cfg.risk.accountSize));
+
    //--- symbol / chart
    string sym = g_symbol;
    StringToUpper(sym);
@@ -718,6 +724,8 @@ void CheckHealth(string &txt[], color &clr[])
         {
          g_newsGuard.CanOpen();                               // reloads the file if it changed
          datetime nowUtc = CTimeZone::ServerToUtc(TimeCurrent());
+         if(g_calendarExportError != "")
+            AddHealth(txt, clr, HEALTH_ERROR, "News: " + g_calendarExportError);
          if(!g_newsGuard.FileFound())
             AddHealth(txt, clr, HEALTH_ERROR, "News file NOT FOUND (Common\\Files\\" + CALENDAR_FILE +
                       ") - attach the EA to a live chart to export it");
@@ -803,6 +811,39 @@ void UpdateDashboard(void)
       ArrayResize(colours, ArraySize(lines));
       colours[ArraySize(lines) - 1] = hclr[i];
      }
+
+   //--- next high-impact news
+   string newsLine;
+   color  newsClr = clrNONE;
+   if(CheckPointer(g_newsGuard) == POINTER_INVALID)
+     {
+      newsLine = "Next news: news guard OFF";
+      newsClr  = HEALTH_WARN;
+     }
+   else
+     {
+      datetime ev;
+      string   evName;
+      bool     active;
+      if(!g_newsGuard.NextEvent(ev, evName, active))
+        {
+         newsLine = "Next news: none in calendar file";
+         newsClr  = HEALTH_ERROR;
+        }
+      else
+        {
+         long secs = (long)(ev - CTimeZone::ServerToUtc(TimeCurrent()));
+         string when = secs <= 0 ? "now" : StringFormat("in %dd %02dh %02dm", (int)(secs / 86400), (int)(secs % 86400 / 3600),
+                                                           (int)(secs % 3600 / 60));
+         newsLine = StringFormat("Next news: %s  %s (%s)%s", evName,
+                                 TimeToString(CTimeZone::UtcToServer(ev), TIME_DATE | TIME_MINUTES), when,
+                                 active ? "  -> ENTRIES BLOCKED" : "");
+         newsClr  = active ? HEALTH_WARN : clrDeepSkyBlue;
+        }
+     }
+   AppendLine(lines, newsLine);
+   ArrayResize(colours, ArraySize(lines));
+   colours[ArraySize(lines) - 1] = newsClr;
    for(int k = 0; k < ArraySize(g_strategies); k++)
      {
       g_strategies[k].Statuses(part);

@@ -108,6 +108,19 @@ public:
    datetime          LastEvent(void) const { return m_lastEvent; }     // UTC
    static void       FileChanged(void) { s_fileVersion++; }
 
+   //--- next event that is still running or upcoming (times in UTC); false if none
+   bool              NextEvent(datetime &utc, string &name, bool &active)
+     {
+      CanOpen();                                   // syncs m_idx / reloads the file if needed
+      if(m_idx >= m_count)
+         return false;
+      utc    = m_times[m_idx];
+      name   = m_names[m_idx];
+      datetime now = CTimeZone::ServerToUtc(TimeCurrent());
+      active = now >= utc - m_cfg.minutesBefore * 60 && now <= utc + m_cfg.minutesAfter * 60;
+      return true;
+     }
+
    virtual bool      Init(const string symbol, const ulong magic)
      {
       CGuard::Init(symbol, magic);

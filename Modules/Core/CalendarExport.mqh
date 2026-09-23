@@ -11,8 +11,11 @@
 #include "../Guards/GuardNews.mqh"
 #include "TimeZone.mqh"
 
+string g_calendarExportError = "";      // last export problem (shown on the dashboard)
+
 bool ExportCalendar(const datetime from, const datetime to)
   {
+   g_calendarExportError = "";
    if(MQLInfoInteger(MQL_TESTER))
       return false;
    MqlCalendarValue values[];
@@ -20,14 +23,16 @@ bool ExportCalendar(const datetime from, const datetime to)
    int n = CalendarValueHistory(values, from, to);
    if(n <= 0)
      {
-      PrintFormat("CalendarExport: no calendar data (%d) - is the terminal connected?", GetLastError());
+      g_calendarExportError = StringFormat("calendar export failed (error %d) - terminal connected?", GetLastError());
+      Print("CalendarExport: " + g_calendarExportError);
       return false;
      }
    FolderCreate("ClaudeEA", FILE_COMMON);
    int h = FileOpen(CALENDAR_FILE, FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON, ',');
    if(h == INVALID_HANDLE)
      {
-      PrintFormat("CalendarExport: cannot write %s (%d)", CALENDAR_FILE, GetLastError());
+      g_calendarExportError = StringFormat("cannot write %s (error %d)", CALENDAR_FILE, GetLastError());
+      Print("CalendarExport: " + g_calendarExportError);
       return false;
      }
    FileWrite(h, "time_utc", "currency", "importance", "event");

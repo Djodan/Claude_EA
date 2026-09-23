@@ -128,7 +128,15 @@ public:
       datetime gmt = TimeGMT();
       int real  = (int)MathRound((double)(TimeTradeServer() - gmt) / 3600.0);
       int model = OffsetHours(s_server, gmt);
-      msg = StringFormat("server GMT%+d, timezone input %s -> GMT%+d", real, EnumToString(s_server), model);
+      msg = StringFormat("server is GMT%+d, input %s = GMT%+d", real, EnumToString(s_server), model);
+      if(real != model)
+        {
+         string fits = "";
+         for(int tz = TZ_NY_CLOSE; tz <= TZ_GMT3; tz++)
+            if(OffsetHours((ENUM_SERVER_TZ)tz, gmt) == real)
+               fits += (fits == "" ? "" : " / ") + EnumToString((ENUM_SERVER_TZ)tz);
+         msg += fits == "" ? " - no preset matches" : " - use " + fits;
+        }
       return real == model;
      }
   };

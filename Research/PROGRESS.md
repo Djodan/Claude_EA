@@ -441,3 +441,12 @@ D1 EMA 50 weaker in 2026 (rec 4.9 / median D1 3.6). Max loss 0.899% everywhere.
   reload automatically → future events always covered.
 - Risk: in risk-% mode a trade whose correct size is below the broker's minimum lot is now
   **skipped** (previously rounded UP to the minimum → could exceed the 1% loss rule).
+
+## v2.32 – portability audit
+- Only dependency: MT5 standard `Trade/Trade.mqh`; no hard-coded paths, symbols or broker names;
+  `Claude.ex5` alone is enough to deploy (see DEPLOY.md).
+- Fixed: spread limit and slippage were in broker points (60 pts = $0.06 on a 3-digit gold broker →
+  would block every trade). Now prices: max spread $0.60, max slippage $0.50.
+- Dashboard: "Next news" line (next high-impact USD event, countdown, "ENTRIES BLOCKED" when inside
+  the window). Health adds: calendar export failures, balance above the account-size cap,
+  timezone mismatch now names the correct setting.

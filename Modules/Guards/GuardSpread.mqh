@@ -1,6 +1,8 @@
 //+------------------------------------------------------------------+
 //|                                                  GuardSpread.mqh |
 //|  Blocks new positions while the spread exceeds a maximum.        |
+//|  The limit is a PRICE distance (e.g. 0.60 = $0.60 on XAUUSD), so |
+//|  it means the same on 2- and 3-digit brokers.                    |
 //+------------------------------------------------------------------+
 #ifndef CLAUDE_GUARDSPREAD_MQH
 #define CLAUDE_GUARDSPREAD_MQH
@@ -10,21 +12,18 @@
 class CGuardSpread : public CGuard
   {
 private:
-   int               m_maxPoints;
+   double            m_maxPrice;
 
 public:
-                     CGuardSpread(void) : CGuard("Spread"), m_maxPoints(0) {}
+                     CGuardSpread(void) : CGuard("Spread"), m_maxPrice(0.0) {}
 
-   void              Configure(const int maxPoints) { m_maxPoints = maxPoints; }
+   void              Configure(const double maxPrice) { m_maxPrice = maxPrice; }
 
    virtual bool      CanOpen(void)
      {
-      double point  = SymbolInfoDouble(m_symbol, SYMBOL_POINT);
-      double ask    = SymbolInfoDouble(m_symbol, SYMBOL_ASK);
-      double bid    = SymbolInfoDouble(m_symbol, SYMBOL_BID);
-      int    spread = (point > 0.0) ? (int)MathRound((ask - bid) / point) : 0;
-      m_status = StringFormat("%d / %d pts", spread, m_maxPoints);
-      return m_maxPoints <= 0 || spread <= m_maxPoints;
+      double spread = SymbolInfoDouble(m_symbol, SYMBOL_ASK) - SymbolInfoDouble(m_symbol, SYMBOL_BID);
+      m_status = StringFormat("%s / %s", DoubleToString(spread, _Digits), DoubleToString(m_maxPrice, _Digits));
+      return m_maxPrice <= 0.0 || spread <= m_maxPrice + _Point / 2.0;
      }
   };
 

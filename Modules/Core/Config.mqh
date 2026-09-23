@@ -99,7 +99,7 @@ struct SEAConfig
    //--- shared guards
    bool              useSession;
    SGuardSessionSettings session;
-   int               maxSpread;
+   double            maxSpread;            // price distance, e.g. 0.60 on XAUUSD (0 = off)
    bool              useDaily;
    SGuardDailySettings daily;
    bool              useNews;
@@ -215,8 +215,8 @@ string ConfigSummary(const SEAConfig &c)
       s += " SESS";
    if(c.useDaily)
       s += " DAILY";
-   if(c.maxSpread > 0)
-      s += StringFormat(" SPR%d", c.maxSpread);
+   if(c.maxSpread > 0.0)
+      s += StringFormat(" SPR%.2f", c.maxSpread);
    return s;
   }
 
