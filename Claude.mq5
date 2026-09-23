@@ -24,7 +24,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.20"
+#define EA_VERSION "2.21"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -150,6 +150,7 @@ input double             InpN_MaxRangeD1  = 0.0;            // Max range width (
 input ENUM_BRK_STOP      InpN_StopMode    = BRK_STOP_RANGE; // Stop placement
 input double             InpN_TPRR        = 2.0;            // TP risk:reward
 input int                InpN_EODHour     = 23;             // Close at (server hour)
+input bool               InpN_AlignAsian  = true;           // Only trade in the direction of the Asian-range break
 
 input group "=== S3 Pullback: EMA trend + RSI dip ==="
 input bool               InpP_Enable      = true;           // Enable
@@ -360,6 +361,7 @@ void BuildConfig(SEAConfig &c)
    c.brk.brk.stopMode       = InpB_StopMode;
    c.brk.brk.oneTradePerDay = InpB_OnePerDay;
    c.brk.brk.lookback       = 400;
+   c.brk.alignAsian         = false;
    c.brk.brk.minRangeD1     = InpB_MinRangeD1;
    c.brk.brk.maxRangeD1     = InpB_MaxRangeD1;
 
@@ -385,6 +387,7 @@ void BuildConfig(SEAConfig &c)
    c.ny.brk.maxRangeD1     = InpN_MaxRangeD1;
    c.ny.brk.stopMode       = InpN_StopMode;
    c.ny.brk.oneTradePerDay = true;
+   c.ny.alignAsian         = InpN_AlignAsian;
 
    //--- S3 Pullback
    c.pb.s.enabled            = InpP_Enable;
@@ -542,6 +545,17 @@ bool BuildBreakout(const SBreakoutConfig &c, const int id)
    b.Configure(c.brk);
    b.Name(g_stratNames[id - 1]);
    st.AddSignal(b, ROLE_TRIGGER);
+   if(c.alignAsian)
+     {
+      // filter: price must be beyond today's Asian range on the side of the trade
+      CSignalSessionBreakout *asian = new CSignalSessionBreakout();
+      SBreakoutSettings a = g_cfg.brk.brk;
+      a.tradeEndHour = 23;
+      a.tradeEndMin  = 59;
+      asian.Configure(a);
+      asian.Name("AsianBias");
+      st.AddSignal(asian, ROLE_FILTER);
+     }
    return StartStrategy(st, id, c.s);
   }
 

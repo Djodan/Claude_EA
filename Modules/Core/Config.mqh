@@ -74,6 +74,7 @@ struct SBreakoutConfig
   {
    SStrategyCommon   s;
    SBreakoutSettings brk;
+   bool              alignAsian;           // only trade in the direction price broke the Asian range
   };
 
 //--- S3: trend pullback
@@ -167,7 +168,7 @@ string BreakoutSummary(const string tag, const SBreakoutConfig &b)
    return StringFormat("%s[%s %02d:%02d-%02d:%02d<%02d buf%.2f%s%s%s%s] ", tag, TfName(b.s.tf),
                        b.brk.rangeStartHour, b.brk.rangeStartMin, b.brk.rangeEndHour, b.brk.rangeEndMin,
                        b.brk.tradeEndHour, b.brk.bufferAtr, d1, b.brk.stopMode == BRK_STOP_MID ? " MID" : "",
-                       b.brk.oneTradePerDay ? " 1/day" : " multi", ExitSummary(b.s));
+                       (b.brk.oneTradePerDay ? " 1/day" : " multi") + (b.alignAsian ? " ALIGN" : ""), ExitSummary(b.s));
   }
 
 //--- short text describing the active setup (for reports and the dashboard)

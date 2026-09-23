@@ -275,6 +275,24 @@ S4 TP 1.5 / 2 / 2.5R. S2 and S4 always on (per-strategy results in strategies.cs
 Hypotheses: S2 max ≈ 0.5–0.75 × D1 ATR removes weak wide-range days; S4 adds ~15–20 trades/month
 at PF > 1.5 without hurting S2.
 
+**Results (61 passes, v2.20):**
+- Portfolio best (S2 filter off, S4 45 min, 1.5R): 245 trades, +32,280, PF 1.62, DD 4.19%, rec 7.4
+  vs **S2 alone: 140 trades, +27,062, PF 2.15, DD 2.44%, rec 10.8** → S4 adds $ but hurts risk-adjusted.
+- S4 alone (median): PF 0.95–1.20, win 44–48%. Best 30 min / 2R and 45 min / 1.5–2R (PF ≈ 1.2).
+- S2 D1-ATR max: 0.5 → PF 2.27 but 79 trades / +20.5k; 0.75 → PF 2.10; 1.0 ≈ off; 0.25 kills it.
+- Max loss 0.899% in all passes ✅.
+
+**Conclusions:** ❌ S4 raw (no edge on its own). ❌ D1-ATR filter (fewer trades, no gain). Keep S2 as is.
+
+---
+
+## Round 9 – NY ORB aligned with the Asian break (v2.21, M1)
+New: S4 option `AlignAsian` – an Asian-range breakout module plugged into S4 as a FILTER; S4 may only
+buy if price is above today's Asian high (sell below the low), i.e. continuation of the day's move.
+Grid (16): align off/on × S4 range 30/45 min × TP 1.5/2R × last entry 18/20.
+Hypothesis: alignment lifts S4 to PF ≥ 1.5 so the portfolio beats S2 alone on recovery.
+If not → disable S4 and return to S2 only.
+
 **Results:** _pending_
 
 Note: user's tester showed deposit $3,000 and "Every tick" – asked to keep $100k + real ticks
