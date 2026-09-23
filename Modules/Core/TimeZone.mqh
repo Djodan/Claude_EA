@@ -120,6 +120,63 @@ public:
       return t + s_cacheDelta;
      }
 
+   //--- server hour at which a reference (NY-close) day starts = gold's daily break (17:00 New York)
+   static int        ExpectedBreakHour(const ENUM_SERVER_TZ tz, const datetime utcNear)
+     {
+      datetime refNow = utcNear + OffsetHours(TZ_NY_CLOSE, utcNear) * 3600;
+      datetime utc    = (refNow - refNow % 86400) - OffsetHours(TZ_NY_CLOSE, utcNear) * 3600;
+      datetime local  = utc + OffsetHours(tz, utc) * 3600;
+      return (int)((local % 86400) / 3600);
+     }
+
+   //--- works in the tester too: find the hour with the fewest M1 bars on Mon-Thu over ~4 weeks
+   //    (XAUUSD pauses for 1 h every day at 17:00 New York) and compare with the input.
+   //    Returns false only when the data clearly contradicts the chosen timezone.
+   static bool       CheckHistory(const string symbol, string &msg)
+     {
+      msg = "";
+      MqlRates r[];
+      ArraySetAsSeries(r, false);
+      int n = CopyRates(symbol, PERIOD_M1, 1, 28 * 1440, r);
+      if(n < 5 * 1380)
+        {
+         msg = "not enough M1 history to verify the timezone";
+         return true;
+        }
+      int cnt[24];
+      ArrayInitialize(cnt, 0);
+      for(int i = 0; i < n; i++)
+        {
+         MqlDateTime d;
+         TimeToStruct(r[i].time, d);
+         if(d.day_of_week >= 1 && d.day_of_week <= 4)
+            cnt[d.hour]++;
+        }
+      int minH = 0, maxC = 0;
+      for(int h = 0; h < 24; h++)
+        {
+         if(cnt[h] < cnt[minH])
+            minH = h;
+         maxC = MathMax(maxC, cnt[h]);
+        }
+      if(maxC == 0 || cnt[minH] > maxC * 0.5)
+        {
+         msg = "no clear daily break in the price data - timezone not verified";
+         return true;                              // not confident either way
+        }
+      datetime utcNow   = ServerToUtc(r[n - 1].time);
+      int      expected = ExpectedBreakHour(s_server, utcNow);
+      msg = StringFormat("daily break in data at %02d:00 server, %s expects %02d:00", minH, EnumToString(s_server), expected);
+      if(minH == expected)
+         return true;
+      string fits = "";
+      for(int tz = TZ_NY_CLOSE; tz <= TZ_GMT3; tz++)
+         if(ExpectedBreakHour((ENUM_SERVER_TZ)tz, utcNow) == minH)
+            fits += (fits == "" ? "" : " / ") + EnumToString((ENUM_SERVER_TZ)tz);
+      msg += fits == "" ? "" : " - use " + fits;
+      return false;
+     }
+
    //--- live chart only: compare the model with the real server offset
    static bool       Check(string &msg)
      {

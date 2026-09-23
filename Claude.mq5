@@ -26,7 +26,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.32"
+#define EA_VERSION "2.33"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -70,7 +70,7 @@
 
 //--- Inputs ---------------------------------------------------------
 input group "=== General ==="
-input ENUM_SERVER_TZ     InpServerTZ      = TZ_NY_CLOSE;    // Broker server timezone (UK broker = TZ_UK)
+input ENUM_SERVER_TZ     InpServerTZ      = TZ_NY_CLOSE;    // Broker SERVER clock (not the company location!) - dashboard verifies it
 input ENUM_EA_PRESET     InpPreset        = PRESET_BREAKOUT; // Preset (0 = use inputs below)
 input ulong              InpMagic         = 20260900;       // Base magic (strategies use +1, +2, +3)
 input double             InpMaxSlippage   = 0.50;           // Max slippage (price, e.g. 0.50 = $0.50 on gold)
@@ -696,10 +696,20 @@ void CheckHealth(string &txt[], color &clr[])
          AddHealth(txt, clr, HEALTH_ERROR, "Terminal not connected to the broker");
      }
 
-   //--- timezone
+   //--- timezone: live clock check + price-data check (the latter also works in the tester)
    string tz;
    if(!CTimeZone::Check(tz))
       AddHealth(txt, clr, HEALTH_ERROR, "Timezone mismatch: " + tz + " - fix 'Broker server timezone'");
+   static datetime tzChecked = 0;
+   static bool     tzHistOk  = true;
+   static string   tzHistMsg = "";
+   if(TimeCurrent() - tzChecked >= 86400)            // price-data check once a day
+     {
+      tzHistOk  = CTimeZone::CheckHistory(g_symbol, tzHistMsg);
+      tzChecked = TimeCurrent();
+     }
+   if(!tzHistOk)
+      AddHealth(txt, clr, HEALTH_ERROR, "Timezone mismatch in price data: " + tzHistMsg);
 
    //--- account size cap vs real account
    double bal = AccountInfoDouble(ACCOUNT_BALANCE);

@@ -450,3 +450,21 @@ D1 EMA 50 weaker in 2026 (rec 4.9 / median D1 3.6). Max loss 0.899% everywhere.
 - Dashboard: "Next news" line (next high-impact USD event, countdown, "ENTRIES BLOCKED" when inside
   the window). Health adds: calendar export failures, balance above the account-size cap,
   timezone mismatch now names the correct setting.
+
+## "UK broker" comparison (2026-09-23) – cause found
+User ran `best_2026_UK.set` (TZ_UK) on a UK-based broker: 134 tr, +14,665, PF 1.49, DD 4.21%
+vs Alpari v2.32 best_2026: 149 tr, +27,567, PF 2.08, DD 2.48%.
+Day-by-day match: 107 same day+dir, 12 opposite dir, 30 only Alpari, 15 only UK.
+**Stop-loss exits happen at the same server time and price on both brokers** (02-11 15:30/15:31,
+03-12 17:11, 07-29 15:30, 09-04 10:45) → the UK broker's server clock is GMT+2/+3 (NY close), NOT UK
+time. TZ_UK shifted the Asian range 2 h early (23:00–07:00 server) → entries at 07:xx before London.
+Fix: use TZ_NY_CLOSE on that broker. (Also: Alpari run loaded a cached spread of 60.00 = guard off.)
+Also seen on both: positions held past EOD when the market stopped before 23:00 (01:05 next-day exits,
+weekend hold 06-19 → 06-22).
+
+## v2.33
+- `CTimeZone::CheckHistory`: finds gold's daily 1-h trading break (17:00 New York) in 4 weeks of M1
+  data and compares it with the timezone input → red Health line with the correct setting.
+  Works in the Strategy Tester (journal: `HEALTH PROBLEM: Timezone mismatch in price data …`).
+- Session close also fires 5 min before the broker's last trading session of the day ends
+  (early daily close, Fridays) → no unintended overnight/weekend holds.

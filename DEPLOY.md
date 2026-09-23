@@ -9,7 +9,9 @@
 
 ## First start (live chart)
 1. Open an **XAUUSD M1** chart (any gold symbol name works, e.g. `XAUUSD.a`, `GOLD`).
-2. Attach the EA and set **Broker server timezone** (`TZ_NY_CLOSE` for GMT+2/+3 brokers, `TZ_UK` for UK time).
+2. Attach the EA and set **Broker server timezone** = the broker's SERVER clock, not where the company is based
+   (many UK-regulated brokers run GMT+2/+3 servers → `TZ_NY_CLOSE`). The Health panel checks it against
+   the live clock and against gold's daily trading break in the price history (works in the tester too).
 3. Check the dashboard **Health** section – everything should be green:
    - Timezone mismatch → the message says which setting to use.
    - News file → exported automatically on attach and every 6 h
