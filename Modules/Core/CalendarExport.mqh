@@ -36,6 +36,9 @@ bool ExportCalendar(const datetime from, const datetime to)
       return false;
      }
    FileWrite(h, "time_utc", "currency", "importance", "event");
+   // MT5 converts ALL calendar times (past winter dates too) with the server's CURRENT UTC offset,
+   // so undo exactly that offset - not the historical DST-aware one.
+   int curOffset = (int)MathRound((double)(TimeTradeServer() - TimeGMT()) / 3600.0) * 3600;
    int written = 0;
    for(int i = 0; i < n; i++)          // values come sorted by time
      {
@@ -47,8 +50,7 @@ bool ExportCalendar(const datetime from, const datetime to)
          continue;
       string name = event.name;
       StringReplace(name, ",", " ");
-      // calendar times are in this terminal's server time -> store as UTC
-      FileWrite(h, TimeToString(CTimeZone::ServerToUtc(values[i].time), TIME_DATE | TIME_MINUTES), country.currency,
+      FileWrite(h, TimeToString(values[i].time - curOffset, TIME_DATE | TIME_MINUTES), country.currency,
                 (int)event.importance, name);
       written++;
      }

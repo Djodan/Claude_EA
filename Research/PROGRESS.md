@@ -476,3 +476,22 @@ only a **fixed GMT+3** server fits. Summer = identical to Alpari (SL exits match
 winter = 1 h ahead. User had been told "London BST" – that is the company/PC clock, not the MT5 server.
 → use `TZ_GMT3` (sets: `best_2026_GMT3.set`, `best_2025_2026_GMT3.set`) and re-export the calendar.
 v2.34: price-data timezone check accepts a 1–2 h daily break (that broker stops gold at 23:00).
+
+### ⚠️ Correction #2: the UK broker is GMT+2/+3 like Alpari (TZ_NY_CLOSE) – "fixed GMT+3" was wrong
+v2.34 run on the UK broker with TZ_NY_CLOSE: 135 tr, +17,975, PF 1.77, DD 2.22%, max loss 0.85%.
+Vs Alpari v2.32: 132 same day+dir, **0 opposite**, entry time diff median 0 min, price diff 0.01.
+The calendar pattern that suggested GMT+3 came from an MT5 quirk: **calendar times are converted with
+the server's CURRENT offset for all dates** → every winter event in calendar_utc.csv was 1 h late on
+every broker (news guard/exit fired 1 h late in winter backtests, incl. the 2025 validation).
+v2.35 export fix: utc = calendar time − current server offset. GMT3 set files removed.
+**Re-export the calendar on each machine** (attach the EA to a live chart once).
+
+Remaining UK vs Alpari gap (+18.8k vs +27.6k): 17 Alpari-only days (that Alpari run had spread
+guard at 60.00 = off; UK at 0.60) and wider Asian ranges on the UK broker (median 58.4 vs 53.7 →
+TP 2R further away; likely spread spikes right after the 01:00 open). Sep 7 (US Labor Day) held
+overnight: early holiday close is not in the broker's session schedule.
+
+## Round 13 – range start minute + spread limit (v2.35), run on BOTH brokers
+Grid (21): range start 01:00–01:30 (5 min) × max spread off / 0.60 / 1.20.
+Hypothesis: starting the range 5–15 min after the open skips opening spread spikes → ranges
+converge between brokers; spread limit 0.60 may skip good breakouts on wider-spread brokers.
