@@ -1,12 +1,13 @@
 //+------------------------------------------------------------------+
 //|                                                 GuardSession.mqh |
-//|  Trading-hours window (server time) and allowed weekdays.        |
+//|  Trading-hours window (reference time) and allowed weekdays.     |
 //|  Windows that cross midnight (e.g. 22:00 - 06:00) are supported. |
 //+------------------------------------------------------------------+
 #ifndef CLAUDE_GUARDSESSION_MQH
 #define CLAUDE_GUARDSESSION_MQH
 
 #include "GuardBase.mqh"
+#include "../Core/TimeZone.mqh"
 
 struct SGuardSessionSettings
   {
@@ -38,7 +39,7 @@ public:
    virtual bool      CanOpen(void)
      {
       MqlDateTime dt;
-      TimeToStruct(TimeCurrent(), dt);
+      TimeToStruct(CTimeZone::ServerToRef(TimeCurrent()), dt);
       if(!m_cfg.days[dt.day_of_week])
         {
          m_status = "day not allowed";

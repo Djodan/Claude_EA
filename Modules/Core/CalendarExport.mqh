@@ -1,14 +1,15 @@
 //+------------------------------------------------------------------+
 //|                                               CalendarExport.mqh |
 //|  Exports MT5 economic-calendar events to                         |
-//|  Common\Files\ClaudeEA\calendar.csv so the Strategy Tester (which|
-//|  has no calendar access) can use them via CGuardNews.            |
+//|  Common\Files\ClaudeEA\calendar_utc.csv (UTC) so the Strategy   |
+//|  Tester (no calendar access) can use them via CGuardNews.        |
 //|  Runs only on a live chart.                                      |
 //+------------------------------------------------------------------+
 #ifndef CLAUDE_CALENDAREXPORT_MQH
 #define CLAUDE_CALENDAREXPORT_MQH
 
 #include "../Guards/GuardNews.mqh"
+#include "TimeZone.mqh"
 
 bool ExportCalendar(const datetime from, const datetime to)
   {
@@ -29,7 +30,7 @@ bool ExportCalendar(const datetime from, const datetime to)
       PrintFormat("CalendarExport: cannot write %s (%d)", CALENDAR_FILE, GetLastError());
       return false;
      }
-   FileWrite(h, "time", "currency", "importance", "event");
+   FileWrite(h, "time_utc", "currency", "importance", "event");
    int written = 0;
    for(int i = 0; i < n; i++)          // values come sorted by time
      {
@@ -41,7 +42,9 @@ bool ExportCalendar(const datetime from, const datetime to)
          continue;
       string name = event.name;
       StringReplace(name, ",", " ");
-      FileWrite(h, TimeToString(values[i].time, TIME_DATE | TIME_MINUTES), country.currency, (int)event.importance, name);
+      // calendar times are in this terminal's server time -> store as UTC
+      FileWrite(h, TimeToString(CTimeZone::ServerToUtc(values[i].time), TIME_DATE | TIME_MINUTES), country.currency,
+                (int)event.importance, name);
       written++;
      }
    FileClose(h);

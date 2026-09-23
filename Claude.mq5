@@ -21,15 +21,18 @@
 //|    Manage/   open-position management                            |
 //|    Trade/    execution and position sizing                       |
 //|    Notify/   alerts          Visual/ chart objects, dashboard    |
+//|  Session times are in reference time (GMT+2/+3, US DST) and are |
+//|  converted from the broker's timezone (input), see TimeZone.mqh. |
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.25"
+#define EA_VERSION "2.30"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
 
 #include "Modules/Core/Defines.mqh"
+#include "Modules/Core/TimeZone.mqh"
 #include "Modules/Core/Config.mqh"
 #include "Modules/Core/Presets.mqh"
 #include "Modules/Core/TesterCriterion.mqh"
@@ -67,6 +70,7 @@
 
 //--- Inputs ---------------------------------------------------------
 input group "=== General ==="
+input ENUM_SERVER_TZ     InpServerTZ      = TZ_NY_CLOSE;    // Broker server timezone (UK broker = TZ_UK)
 input ENUM_EA_PRESET     InpPreset        = PRESET_BREAKOUT; // Preset (0 = use inputs below)
 input ulong              InpMagic         = 20260900;       // Base magic (strategies use +1, +2, +3)
 input int                InpDeviation     = 50;             // Max slippage (points)
@@ -114,11 +118,11 @@ input group "=== S2 Breakout: session range ==="
 input bool               InpB_Enable      = true;           // Enable
 input ENUM_TIMEFRAMES    InpB_TF          = PERIOD_CURRENT; // Timeframe (current = chart)
 input ENUM_EA_TRADE_MODE InpB_Mode        = EA_TRADE_BOTH;  // Direction
-input int                InpB_RangeStartH = 1;              // Range start hour (server)
+input int                InpB_RangeStartH = 1;              // Range start hour (ref GMT+2/+3)
 input int                InpB_RangeStartM = 0;              // Range start minute
-input int                InpB_RangeEndH   = 9;              // Range end hour (server)
+input int                InpB_RangeEndH   = 9;              // Range end hour (ref GMT+2/+3)
 input int                InpB_RangeEndM   = 0;              // Range end minute
-input int                InpB_TradeEndH   = 17;             // Last entry hour (server)
+input int                InpB_TradeEndH   = 17;             // Last entry hour (ref GMT+2/+3)
 input double             InpB_BufferAtr   = 0.25;           // Breakout buffer (ATR x)
 input double             InpB_MinRangeAtr = 0.0;            // Min range width (ATR x, 0 = off)
 input double             InpB_MaxRangeAtr = 0.0;            // Max range width (ATR x, 0 = off)
@@ -132,7 +136,7 @@ input ENUM_TP_MODE       InpB_TPMode      = TP_RR;          // Take profit mode
 input double             InpB_TPRR        = 2.0;            // TP risk:reward
 input double             InpB_TPAtr       = 4.0;            // TP ATR multiple
 input bool               InpB_EOD         = true;           // Close at session end
-input int                InpB_EODHour     = 23;             // Session end hour (server)
+input int                InpB_EODHour     = 23;             // Session end hour (ref GMT+2/+3)
 input bool               InpB_UseBE       = false;          // Exit: breakeven
 input double             InpB_BETrigger   = 1.0;            // Exit: BE trigger (R)
 input double             InpB_BELock      = 0.05;           // Exit: BE lock beyond entry (R)
@@ -147,10 +151,10 @@ input int                InpB_NewsExit    = 5;              // Exit: close N min
 input group "=== S4 NY opening-range breakout ==="
 input bool               InpN_Enable      = false;          // Enable (R8/R9: no edge)
 input ENUM_EA_TRADE_MODE InpN_Mode        = EA_TRADE_BOTH;  // Direction
-input int                InpN_StartH      = 16;             // Range start hour (server; NY open = 16:30)
+input int                InpN_StartH      = 16;             // Range start hour (ref GMT+2/+3; NY open = 16:30)
 input int                InpN_StartM      = 30;             // Range start minute
 input int                InpN_RangeMins   = 30;             // Range length (minutes)
-input int                InpN_TradeEndH   = 20;             // Last entry hour (server)
+input int                InpN_TradeEndH   = 20;             // Last entry hour (ref GMT+2/+3)
 input double             InpN_BufferAtr   = 0.25;           // Breakout buffer (ATR x)
 input double             InpN_MaxRangeD1  = 0.0;            // Max range width (x daily ATR, 0 = off)
 input ENUM_BRK_STOP      InpN_StopMode    = BRK_STOP_RANGE; // Stop placement
@@ -188,7 +192,7 @@ input bool               InpNewsExport    = true;           // Export calendar w
 input datetime           InpNewsFrom      = D'2024.12.01';  // Export from
 
 input group "=== Guard: Session / Spread / Daily ==="
-input bool               InpUseSession    = false;          // Session filter (server time)
+input bool               InpUseSession    = false;          // Session filter (ref time GMT+2/+3)
 input int                InpSessStartH    = 9;              // Start hour
 input int                InpSessEndH      = 22;             // End hour
 input bool               InpTradeFri      = true;           // Trade Fridays
@@ -685,6 +689,18 @@ int OnInit()
    g_symbol    = _Symbol;
    g_testStart = TimeCurrent();
    g_excursions.Init(_Symbol, InpMagic);
+
+   CTimeZone::Server(InpServerTZ);
+   string tzMsg;
+   if(!CTimeZone::Check(tzMsg))
+     {
+      PrintFormat("WARNING: timezone mismatch (%s) - set 'Broker server timezone' correctly!", tzMsg);
+      if(!MQLInfoInteger(MQL_TESTER))
+         Alert("Claude EA: timezone mismatch - " + tzMsg);
+     }
+   else
+      if(tzMsg != "")
+         PrintFormat("Timezone OK: %s", tzMsg);
 
    BuildConfig(g_cfg);
    ApplyPreset(InpPreset, g_cfg);

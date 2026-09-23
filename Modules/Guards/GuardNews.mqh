@@ -3,16 +3,17 @@
 //|  Blocks new entries from minutesBefore to minutesAfter around    |
 //|  economic-calendar events of the chosen currencies/importance.   |
 //|                                                                  |
-//|  Events come from Common\Files\ClaudeEA\calendar.csv (server     |
-//|  time), written by CalendarExport when the EA runs on a live     |
+//|  Events come from Common\Files\ClaudeEA\calendar_utc.csv (UTC,   |
+//|  any broker), written by CalendarExport on a live chart          |
 //|  chart - the Strategy Tester has no calendar access of its own.  |
 //+------------------------------------------------------------------+
 #ifndef CLAUDE_GUARDNEWS_MQH
 #define CLAUDE_GUARDNEWS_MQH
 
 #include "GuardBase.mqh"
+#include "../Core/TimeZone.mqh"
 
-#define CALENDAR_FILE "ClaudeEA\\calendar.csv"
+#define CALENDAR_FILE "ClaudeEA\\calendar_utc.csv"   // event times in UTC
 
 struct SGuardNewsSettings
   {
@@ -53,7 +54,7 @@ private:
       int h = FileOpen(CALENDAR_FILE, FILE_READ | FILE_CSV | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ, ',');
       if(h == INVALID_HANDLE)
          return false;
-      // header: time,currency,importance,event
+      // header: time_utc,currency,importance,event
       for(int k = 0; k < 4 && !FileIsEnding(h); k++)
          FileReadString(h);
       while(!FileIsEnding(h))
@@ -108,7 +109,7 @@ public:
          m_status = "no calendar data";
          return true;
         }
-      datetime now = TimeCurrent();
+      datetime now = CTimeZone::ServerToUtc(TimeCurrent());
       if(m_idx > 0 && m_idx < m_count && m_times[m_idx - 1] + m_cfg.minutesAfter * 60 >= now)
          m_idx--;                      // tolerate small time steps back (e.g. dashboard vs. tick)
       while(m_idx < m_count && m_times[m_idx] + m_cfg.minutesAfter * 60 < now)
@@ -120,10 +121,10 @@ public:
         }
       if(now >= m_times[m_idx] - m_cfg.minutesBefore * 60)
         {
-         m_status = m_names[m_idx] + " " + TimeToString(m_times[m_idx], TIME_MINUTES);
+         m_status = m_names[m_idx] + " " + TimeToString(CTimeZone::UtcToServer(m_times[m_idx]), TIME_MINUTES);
          return false;
         }
-      m_status = "next " + m_names[m_idx] + " " + TimeToString(m_times[m_idx], TIME_DATE | TIME_MINUTES);
+      m_status = "next " + m_names[m_idx] + " " + TimeToString(CTimeZone::UtcToServer(m_times[m_idx]), TIME_DATE | TIME_MINUTES);
       return true;
      }
   };

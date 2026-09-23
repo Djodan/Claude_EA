@@ -6,12 +6,13 @@
 //|  [rangeStart, rangeEnd). After rangeEnd and before tradeEnd, the |
 //|  first bar that CLOSES beyond the range +/- buffer x ATR fires.  |
 //|  Suggested stop: opposite side of the range, or its midpoint.    |
-//|  All times are broker server time.                               |
+//|  All times are REFERENCE time (GMT+2/+3, see TimeZone.mqh).      |
 //+------------------------------------------------------------------+
 #ifndef CLAUDE_SIGNALSESSIONBREAKOUT_MQH
 #define CLAUDE_SIGNALSESSIONBREAKOUT_MQH
 
 #include "SeriesModule.mqh"
+#include "../Core/TimeZone.mqh"
 
 enum ENUM_BRK_STOP
   {
@@ -70,8 +71,9 @@ private:
          m_d1Atr = atr[n - 1];
      }
 
-   static datetime   Day(const datetime t)            { return t - t % 86400; }
-   static int        MinuteOfDay(const datetime t)    { return (int)((t % 86400) / 60); }
+   //--- day / minute of day in reference time (bar times are server time)
+   static datetime   Day(const datetime t)            { datetime r = CTimeZone::ServerToRef(t); return r - r % 86400; }
+   static int        MinuteOfDay(const datetime t)    { datetime r = CTimeZone::ServerToRef(t); return (int)((r % 86400) / 60); }
    int               RangeStart(void) const           { return m_cfg.rangeStartHour * 60 + m_cfg.rangeStartMin; }
    int               RangeEnd(void) const             { return m_cfg.rangeEndHour * 60 + m_cfg.rangeEndMin; }
    int               TradeEnd(void) const             { return m_cfg.tradeEndHour * 60 + m_cfg.tradeEndMin; }
@@ -174,7 +176,7 @@ public:
       CSeriesModule::Init(symbol, tf);
       if(RangeEnd() <= RangeStart() || TradeEnd() <= RangeEnd())
         {
-         PrintFormat("%s: need range start < range end < trade end (server time)", m_name);
+         PrintFormat("%s: need range start < range end < trade end (reference time)", m_name);
          return false;
         }
       Lookback(MathMax(m_cfg.lookback, 86400 / MathMax(60, PeriodSeconds(m_tf)) * 3));

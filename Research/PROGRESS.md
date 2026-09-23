@@ -414,3 +414,19 @@ D1 EMA 50 weaker in 2026 (rec 4.9 / median D1 3.6). Max loss 0.899% everywhere.
   DD 2.44%, max loss 0.90%. ⚠️ fails 2025 (PF 1.04, max loss 1.07%).
 - `best_2025_2026.set` – S2 + **D1 EMA 50 + news exit 5 min** (only config validated on both years):
   2025 +10,013 PF 1.47 DD 3.08% · 2026 +13,204 PF 2.44 DD 2.61% · max loss ≤ 0.91%.
+
+---
+
+## v2.30 – broker timezone support (user will run on a UK-timezone broker)
+- All session inputs are now in **reference time = GMT+2/+3 with US DST** (the Alpari clock all
+  results above were produced on). Input `Broker server timezone` (NY-close / UK / CET / fixed)
+  converts server time → reference time, incl. US vs UK DST switch dates (`Modules/Core/TimeZone.mqh`).
+- Breakout days/minutes, EOD close and session guard use reference time → identical behaviour on
+  any broker; Asian range 01–09 ref = 23:00–07:00 UK (crossing midnight is handled).
+- News calendar now stored in **UTC** (`calendar_utc.csv`, broker-neutral; Common\Files is shared by
+  all terminals on the PC). Old `calendar.csv` no longer used → re-export once.
+- Live charts: EA compares the real server offset with the chosen timezone and alerts on mismatch.
+- Alpari results unchanged (NY-close model = identity). Remaining difference on a UK broker: its D1
+  bars start at 00:00 UK (and may include a small Sunday bar) → the D1 EMA 50 trend filter can differ
+  slightly; re-backtest on the UK broker's data before going live.
+- Set files: `best_2026(_UK).set`, `best_2025_2026(_UK).set`.
