@@ -10,6 +10,7 @@
 //|    S1 Trend     - DJ Trend flip (Pine port) + filters            |
 //|    S2 Breakout  - session range breakout (Asian -> London/NY)    |
 //|    S3 Pullback  - EMA trend + RSI dip entries                    |
+//|    S4 BreakoutNY - NY opening-range breakout (same module as S2)  |
 //|                                                                  |
 //|  Modules live in ./Modules:                                      |
 //|    Core/     types, config, presets, new bar, tester reporting   |
@@ -23,10 +24,10 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.15"
+#define EA_VERSION "2.20"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
-#property description "XAUUSD M1/M2 portfolio: DJ Trend, session breakout and trend pullback with shared news/session/spread guards."
+#property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
 
 #include "Modules/Core/Defines.mqh"
 #include "Modules/Core/Config.mqh"
@@ -60,6 +61,7 @@
 #define STRAT_TREND    1
 #define STRAT_BREAKOUT 2
 #define STRAT_PULLBACK 3
+#define STRAT_NY       4
 
 //--- Inputs ---------------------------------------------------------
 input group "=== General ==="
@@ -118,6 +120,8 @@ input int                InpB_TradeEndH   = 17;             // Last entry hour (
 input double             InpB_BufferAtr   = 0.25;           // Breakout buffer (ATR x)
 input double             InpB_MinRangeAtr = 0.0;            // Min range width (ATR x, 0 = off)
 input double             InpB_MaxRangeAtr = 0.0;            // Max range width (ATR x, 0 = off)
+input double             InpB_MinRangeD1  = 0.0;            // Min range width (x daily ATR, 0 = off)
+input double             InpB_MaxRangeD1  = 0.0;            // Max range width (x daily ATR, 0 = off)
 input int                InpB_AtrLen      = 14;             // ATR length
 input ENUM_BRK_STOP      InpB_StopMode    = BRK_STOP_RANGE; // Stop placement
 input bool               InpB_OnePerDay   = true;           // One breakout per day
@@ -133,6 +137,19 @@ input double             InpB_BELock      = 0.05;           // Exit: BE lock bey
 input bool               InpB_UsePartial  = false;          // Exit: partial close
 input double             InpB_PartialR    = 1.0;            // Exit: partial at (R)
 input double             InpB_PartialPct  = 50.0;           // Exit: partial close %
+
+input group "=== S4 NY opening-range breakout ==="
+input bool               InpN_Enable      = true;           // Enable
+input ENUM_EA_TRADE_MODE InpN_Mode        = EA_TRADE_BOTH;  // Direction
+input int                InpN_StartH      = 16;             // Range start hour (server; NY open = 16:30)
+input int                InpN_StartM      = 30;             // Range start minute
+input int                InpN_RangeMins   = 30;             // Range length (minutes)
+input int                InpN_TradeEndH   = 20;             // Last entry hour (server)
+input double             InpN_BufferAtr   = 0.25;           // Breakout buffer (ATR x)
+input double             InpN_MaxRangeD1  = 0.0;            // Max range width (x daily ATR, 0 = off)
+input ENUM_BRK_STOP      InpN_StopMode    = BRK_STOP_RANGE; // Stop placement
+input double             InpN_TPRR        = 2.0;            // TP risk:reward
+input int                InpN_EODHour     = 23;             // Close at (server hour)
 
 input group "=== S3 Pullback: EMA trend + RSI dip ==="
 input bool               InpP_Enable      = true;           // Enable
@@ -202,7 +219,7 @@ CDashboard       g_dashboard;
 CExcursionTracker g_excursions;
 string           g_symbol;
 datetime         g_testStart;
-string           g_stratNames[] = {"Trend", "Breakout", "Pullback"};   // index = id - 1
+string           g_stratNames[] = {"Trend", "Breakout", "Pullback", "BreakoutNY"};   // index = id - 1
 
 //+------------------------------------------------------------------+
 //| Inputs -> config                                                 |
@@ -343,6 +360,31 @@ void BuildConfig(SEAConfig &c)
    c.brk.brk.stopMode       = InpB_StopMode;
    c.brk.brk.oneTradePerDay = InpB_OnePerDay;
    c.brk.brk.lookback       = 400;
+   c.brk.brk.minRangeD1     = InpB_MinRangeD1;
+   c.brk.brk.maxRangeD1     = InpB_MaxRangeD1;
+
+   //--- S4 NY opening-range breakout (same module, own window)
+   c.ny = c.brk;
+   c.ny.s.enabled          = InpN_Enable;
+   c.ny.s.trade.mode       = InpN_Mode;
+   c.ny.s.trade.tpRR       = InpN_TPRR;
+   c.ny.s.exits.closeHour  = InpN_EODHour;
+   c.ny.s.exits.useBE      = false;
+   c.ny.s.exits.usePartial = false;
+   int nyEnd = InpN_StartH * 60 + InpN_StartM + InpN_RangeMins;
+   c.ny.brk.rangeStartHour = InpN_StartH;
+   c.ny.brk.rangeStartMin  = InpN_StartM;
+   c.ny.brk.rangeEndHour   = nyEnd / 60;
+   c.ny.brk.rangeEndMin    = nyEnd % 60;
+   c.ny.brk.tradeEndHour   = InpN_TradeEndH;
+   c.ny.brk.tradeEndMin    = 0;
+   c.ny.brk.bufferAtr      = InpN_BufferAtr;
+   c.ny.brk.minRangeAtr    = 0.0;
+   c.ny.brk.maxRangeAtr    = 0.0;
+   c.ny.brk.minRangeD1     = 0.0;
+   c.ny.brk.maxRangeD1     = InpN_MaxRangeD1;
+   c.ny.brk.stopMode       = InpN_StopMode;
+   c.ny.brk.oneTradePerDay = true;
 
    //--- S3 Pullback
    c.pb.s.enabled            = InpP_Enable;
@@ -493,13 +535,14 @@ bool BuildTrend(const STrendConfig &c)
    return StartStrategy(st, STRAT_TREND, c.s);
   }
 
-bool BuildBreakout(const SBreakoutConfig &c)
+bool BuildBreakout(const SBreakoutConfig &c, const int id)
   {
-   CStrategy *st = new CStrategy(g_stratNames[STRAT_BREAKOUT - 1]);
+   CStrategy *st = new CStrategy(g_stratNames[id - 1]);
    CSignalSessionBreakout *b = new CSignalSessionBreakout();
    b.Configure(c.brk);
+   b.Name(g_stratNames[id - 1]);
    st.AddSignal(b, ROLE_TRIGGER);
-   return StartStrategy(st, STRAT_BREAKOUT, c.s);
+   return StartStrategy(st, id, c.s);
   }
 
 bool BuildPullback(const SPullbackConfig &c)
@@ -624,7 +667,9 @@ int OnInit()
       return INIT_PARAMETERS_INCORRECT;
    if(g_cfg.trend.s.enabled && !BuildTrend(g_cfg.trend))
       return INIT_PARAMETERS_INCORRECT;
-   if(g_cfg.brk.s.enabled && !BuildBreakout(g_cfg.brk))
+   if(g_cfg.brk.s.enabled && !BuildBreakout(g_cfg.brk, STRAT_BREAKOUT))
+      return INIT_PARAMETERS_INCORRECT;
+   if(g_cfg.ny.s.enabled && !BuildBreakout(g_cfg.ny, STRAT_NY))
       return INIT_PARAMETERS_INCORRECT;
    if(g_cfg.pb.s.enabled && !BuildPullback(g_cfg.pb))
       return INIT_PARAMETERS_INCORRECT;

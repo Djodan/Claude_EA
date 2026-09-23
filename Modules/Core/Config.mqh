@@ -87,6 +87,7 @@ struct SEAConfig
   {
    STrendConfig      trend;
    SBreakoutConfig   brk;
+   SBreakoutConfig   ny;                   // S4: NY opening-range breakout
    SPullbackConfig   pb;
    SRiskSettings     risk;                 // shared sizing
    //--- shared guards
@@ -158,6 +159,17 @@ string ExitSummary(const SStrategyCommon &s)
    return r;
   }
 
+string BreakoutSummary(const string tag, const SBreakoutConfig &b)
+  {
+   string d1 = "";
+   if(b.brk.maxRangeD1 > 0.0 || b.brk.minRangeD1 > 0.0)
+      d1 = StringFormat(" d1%.2f-%.2f", b.brk.minRangeD1, b.brk.maxRangeD1);
+   return StringFormat("%s[%s %02d:%02d-%02d:%02d<%02d buf%.2f%s%s%s%s] ", tag, TfName(b.s.tf),
+                       b.brk.rangeStartHour, b.brk.rangeStartMin, b.brk.rangeEndHour, b.brk.rangeEndMin,
+                       b.brk.tradeEndHour, b.brk.bufferAtr, d1, b.brk.stopMode == BRK_STOP_MID ? " MID" : "",
+                       b.brk.oneTradePerDay ? " 1/day" : " multi", ExitSummary(b.s));
+  }
+
 //--- short text describing the active setup (for reports and the dashboard)
 string ConfigSummary(const SEAConfig &c)
   {
@@ -177,11 +189,9 @@ string ConfigSummary(const SEAConfig &c)
       s += "] ";
      }
    if(c.brk.s.enabled)
-      s += StringFormat("B[%s %02d:%02d-%02d:%02d<%02d buf%.2f rng%.1f-%.1f%s%s] ", TfName(c.brk.s.tf),
-                        c.brk.brk.rangeStartHour, c.brk.brk.rangeStartMin, c.brk.brk.rangeEndHour, c.brk.brk.rangeEndMin,
-                        c.brk.brk.tradeEndHour, c.brk.brk.bufferAtr, c.brk.brk.minRangeAtr, c.brk.brk.maxRangeAtr,
-                        (c.brk.brk.stopMode == BRK_STOP_MID ? " MID" : "") + (c.brk.brk.oneTradePerDay ? " 1/day" : " multi"),
-                        ExitSummary(c.brk.s));
+      s += BreakoutSummary("B", c.brk);
+   if(c.ny.s.enabled)
+      s += BreakoutSummary("N", c.ny);
    if(c.pb.s.enabled)
       s += StringFormat("P[%s %d/%d RSI%d %.0f/%.0f%s] ", TfName(c.pb.s.tf), c.pb.pb.fastLen, c.pb.pb.slowLen,
                         c.pb.pb.rsiLen, c.pb.pb.rsiLow, c.pb.pb.rsiHigh, ExitSummary(c.pb.s));

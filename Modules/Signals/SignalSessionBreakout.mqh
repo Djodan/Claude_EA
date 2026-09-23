@@ -30,6 +30,8 @@ struct SBreakoutSettings
    double            bufferAtr;         // close must clear the range by this x ATR
    double            minRangeAtr;       // skip days with a range narrower than this x ATR (0 = off)
    double            maxRangeAtr;       // skip days with a range wider than this x ATR (0 = off)
+   double            maxRangeD1;        // skip days with a range wider than this x daily ATR (0 = off)
+   double            minRangeD1;        // skip days with a range narrower than this x daily ATR (0 = off)
    int               atrLen;
    ENUM_BRK_STOP     stopMode;
    bool              oneTradePerDay;    // only the first breakout of the day, either side
@@ -43,6 +45,30 @@ private:
    double            m_atr[];
    double            m_lastHigh;
    double            m_lastLow;
+   double            m_d1Atr;           // ATR(14) of closed daily bars
+
+   void              UpdateDailyAtr(void)
+     {
+      MqlRates d1[];
+      ArraySetAsSeries(d1, false);
+      int n = CopyRates(m_symbol, PERIOD_D1, 1, 60, d1);
+      m_d1Atr = 0.0;
+      if(n < 20)
+         return;
+      double h[], l[], c[], atr[];
+      ArrayResize(h, n);
+      ArrayResize(l, n);
+      ArrayResize(c, n);
+      for(int i = 0; i < n; i++)
+        {
+         h[i] = d1[i].high;
+         l[i] = d1[i].low;
+         c[i] = d1[i].close;
+        }
+      CPineTA::ATR(h, l, c, n, 14, atr);
+      if(!CPineTA::IsNA(atr[n - 1]))
+         m_d1Atr = atr[n - 1];
+     }
 
    static datetime   Day(const datetime t)            { return t - t % 86400; }
    static int        MinuteOfDay(const datetime t)    { return (int)((t % 86400) / 60); }
@@ -90,6 +116,10 @@ private:
          return SIG_NONE;
       if(m_cfg.maxRangeAtr > 0.0 && width > m_cfg.maxRangeAtr * atr)
          return SIG_NONE;
+      if(m_d1Atr > 0.0 && m_cfg.maxRangeD1 > 0.0 && width > m_cfg.maxRangeD1 * m_d1Atr)
+         return SIG_NONE;
+      if(m_d1Atr > 0.0 && m_cfg.minRangeD1 > 0.0 && width < m_cfg.minRangeD1 * m_d1Atr)
+         return SIG_NONE;
 
       double up = hi + m_cfg.bufferAtr * atr;
       double dn = lo - m_cfg.bufferAtr * atr;
@@ -118,7 +148,7 @@ private:
      }
 
 public:
-                     CSignalSessionBreakout(void) : CSeriesModule("Breakout"), m_lastHigh(0.0), m_lastLow(0.0)
+                     CSignalSessionBreakout(void) : CSeriesModule("Breakout"), m_lastHigh(0.0), m_lastLow(0.0), m_d1Atr(0.0)
      {
       m_cfg.rangeStartHour = 1;
       m_cfg.rangeStartMin  = 0;
@@ -129,6 +159,8 @@ public:
       m_cfg.bufferAtr      = 0.1;
       m_cfg.minRangeAtr    = 1.5;
       m_cfg.maxRangeAtr    = 12.0;
+      m_cfg.maxRangeD1     = 0.0;
+      m_cfg.minRangeD1     = 0.0;
       m_cfg.atrLen         = 14;
       m_cfg.stopMode       = BRK_STOP_RANGE;
       m_cfg.oneTradePerDay = true;
@@ -157,6 +189,7 @@ public:
       if(!LoadRates(m_cfg.atrLen * 3))
          return false;
       CPineTA::ATR(m_high, m_low, m_close, m_n, m_cfg.atrLen, m_atr);
+      UpdateDailyAtr();
 
       double sl;
       ENUM_SIGNAL_DIR dir = Evaluate(m_n - 1, sl);
@@ -206,7 +239,8 @@ public:
       if(m_lastHigh <= 0.0)
          return StringFormat("range %02d:%02d-%02d:%02d building", m_cfg.rangeStartHour, m_cfg.rangeStartMin,
                              m_cfg.rangeEndHour, m_cfg.rangeEndMin);
-      return StringFormat("range %s - %s  %s", DoubleToString(m_lastLow, _Digits), DoubleToString(m_lastHigh, _Digits),
+      return StringFormat("range %s - %s (%.2f x D1 ATR)  %s", DoubleToString(m_lastLow, _Digits),
+                          DoubleToString(m_lastHigh, _Digits), m_d1Atr > 0.0 ? (m_lastHigh - m_lastLow) / m_d1Atr : 0.0,
                           CSignalModule::Status());
      }
   };

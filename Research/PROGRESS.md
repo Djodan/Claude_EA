@@ -36,7 +36,7 @@ Maximise **risk-adjusted** profitability, not just net profit:
 | Guard | Max spread | untested |
 | Guard | Daily loss / target / max trades | untested |
 | Manage | Partial close | untested |
-| Manage | Breakeven | ❌ R1 (1 ATR) |
+| Manage | Breakeven | ❌ R1 (1 ATR) · ≈ neutral R7 (1R on breakout) |
 | Manage | ATR trailing | ❌ R1 (2/2.5 ATR) – retry wider |
 | Manage | Time exit | untested |
 | Exit | SL/TP: ATR, points, R:R | ✅ SL 2 ATR R1 – tuning R2 |
@@ -242,6 +242,38 @@ is rarely reached; most profit comes from the EOD close.
 Grid (20): TP 1.0–3.0R (0.5) × breakeven at 1R on/off × partial 50% at 1R on/off.
 Hypotheses: since only 9/142 trades reach 2R, TP 1–1.5R or partial at 1R converts more of the
 MFE into profit; BE at 1R cuts the few reversals after +1R. Must keep max_loss_pct < 1.0.
+
+**Results (10 passes – partial toggle was not ticked; v2.15, 0.8% risk capped at $100k):**
+
+| TP | BE 1R | Trades | Net | PF | DD % | Recovery | Max loss % |
+|---|---|---|---|---|---|---|---|
+| **2.0R** | off | 140 | **+27,062** | 2.15 | 2.44 | **10.8** | 0.90 |
+| 2.0R | on | 140 | +27,459 | **2.22** | 3.09 | 8.9 | 0.81 |
+| 1.0R | off/on | 140 | +24,246 | 2.08 | 2.35 | 10.3 | 0.81 |
+| 1.5 / 2.5 / 3.0R | off | 140 | +24,954–25,665 | 2.06–2.09 | 2.44 | 10.0–10.3 | 0.90 |
+
+- Exits barely matter (PF 2.06–2.22) → keep TP 2R, no BE. ✅ Max loss now 0.81–0.90% (< 1% prop rule).
+
+Trade breakdown (single run, 140 trades, total +33.8R):
+- **Every month profitable** (Jan PF 1.16 … Jun 6.10) – consistent edge.
+- By range width (= 1R): narrowest quartile (< $41.6) avg +0.46R PF 3.11; wider quartiles +0.10–0.24R.
+- By entry hour (server): 09 → +18.2R (56 trades, PF 2.58) · 10–12 good · 14–15 weak (PF 0.9–1.3).
+- SELL PF 2.72 vs BUY PF 1.70. Weekdays all positive (Mon weakest).
+
+**Conclusions:** exit tuning exhausted; next gains must come from more / better entries.
+
+---
+
+## v2.20 changes
+- **S4 BreakoutNY**: same breakout module, range = first N minutes after NY open (16:30 server),
+  entries until 20:00, stop = other side, TP 2R, flat 23:00. Own magic (+4) and stats row.
+- Breakout range filter vs **daily ATR(14)** (min/max × D1 ATR) – more stable than M1 ATR.
+
+## Round 8 – NY ORB + daily-ATR range filter (v2.20, M1)
+Grid (60): S2 max range 0 / 0.25 / 0.5 / 0.75 / 1.0 × D1 ATR · S4 range 15 / 30 / 45 / 60 min ·
+S4 TP 1.5 / 2 / 2.5R. S2 and S4 always on (per-strategy results in strategies.csv).
+Hypotheses: S2 max ≈ 0.5–0.75 × D1 ATR removes weak wide-range days; S4 adds ~15–20 trades/month
+at PF > 1.5 without hurting S2.
 
 **Results:** _pending_
 
