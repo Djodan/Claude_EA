@@ -468,3 +468,11 @@ weekend hold 06-19 → 06-22).
   Works in the Strategy Tester (journal: `HEALTH PROBLEM: Timezone mismatch in price data …`).
 - Session close also fires 5 min before the broker's last trading session of the day ends
   (early daily close, Fridays) → no unintended overnight/weekend holds.
+
+### Correction (same day): the "UK" broker's server is fixed GMT+3
+Its exported calendar (made with the default NY-close model) stores NFP at 12:30 UTC in summer (correct)
+but 14:30 UTC in Dec–Mar (true 13:30) and 12:30 for CPI on 03-11 (US-DST gap week, correct) →
+only a **fixed GMT+3** server fits. Summer = identical to Alpari (SL exits matched to the minute);
+winter = 1 h ahead. User had been told "London BST" – that is the company/PC clock, not the MT5 server.
+→ use `TZ_GMT3` (sets: `best_2026_GMT3.set`, `best_2025_2026_GMT3.set`) and re-export the calendar.
+v2.34: price-data timezone check accepts a 1–2 h daily break (that broker stops gold at 23:00).

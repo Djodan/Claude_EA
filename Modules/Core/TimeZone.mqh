@@ -152,26 +152,35 @@ public:
          if(d.day_of_week >= 1 && d.day_of_week <= 4)
             cnt[d.hour]++;
         }
-      int minH = 0, maxC = 0;
+      int maxC = 0;
+      for(int h = 0; h < 24; h++)
+         maxC = MathMax(maxC, cnt[h]);
+      // quiet hours = daily break; some brokers stop gold early, so the break can span 1-2 hours
+      bool quiet[24];
+      int  nQuiet = 0;
+      string qs = "";
       for(int h = 0; h < 24; h++)
         {
-         if(cnt[h] < cnt[minH])
-            minH = h;
-         maxC = MathMax(maxC, cnt[h]);
+         quiet[h] = maxC > 0 && cnt[h] <= maxC * 0.5;
+         if(quiet[h])
+           {
+            nQuiet++;
+            qs += StringFormat("%s%02d", qs == "" ? "" : "/", h);
+           }
         }
-      if(maxC == 0 || cnt[minH] > maxC * 0.5)
+      if(nQuiet == 0 || nQuiet > 3)
         {
          msg = "no clear daily break in the price data - timezone not verified";
          return true;                              // not confident either way
         }
       datetime utcNow   = ServerToUtc(r[n - 1].time);
       int      expected = ExpectedBreakHour(s_server, utcNow);
-      msg = StringFormat("daily break in data at %02d:00 server, %s expects %02d:00", minH, EnumToString(s_server), expected);
-      if(minH == expected)
+      msg = StringFormat("daily break in data at %s:00 server, %s expects %02d:00", qs, EnumToString(s_server), expected);
+      if(quiet[expected])
          return true;
       string fits = "";
       for(int tz = TZ_NY_CLOSE; tz <= TZ_GMT3; tz++)
-         if(ExpectedBreakHour((ENUM_SERVER_TZ)tz, utcNow) == minH)
+         if(quiet[ExpectedBreakHour((ENUM_SERVER_TZ)tz, utcNow)])
             fits += (fits == "" ? "" : " / ") + EnumToString((ENUM_SERVER_TZ)tz);
       msg += fits == "" ? "" : " - use " + fits;
       return false;
