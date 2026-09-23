@@ -293,7 +293,21 @@ Grid (16): align off/on × S4 range 30/45 min × TP 1.5/2R × last entry 18/20.
 Hypothesis: alignment lifts S4 to PF ≥ 1.5 so the portfolio beats S2 alone on recovery.
 If not → disable S4 and return to S2 only.
 
+**Results (9 passes – only align=on ran):** S4 aligned 47–65 trades, PF 0.80–1.00 (net -3.8k…0).
+Portfolio DD doubles (2.4% → 4.3–4.9%), recovery 4.4–5.5 vs 10.8 for S2 alone. S2 unchanged (PF 2.15).
+
+**Conclusions:** ❌ S4 NY ORB – no edge on 2026 gold, raw or aligned. Disabled (v2.22).
+The edge is specific to the Asian range breaking into London.
+
+---
+
+## Round 10 – S2 signal timeframe (v2.22)
+S2 only. Grid (20): S2 TF M1–M5 (chart stays M1) × last entry 14/17 × one-per-day on/off.
+Hypothesis: M1 enters earliest (best R), M2–M3 may filter 1-minute fakeouts; M5 too late.
+
 **Results:** _pending_
+
+Next after R10: single un-optimised validation run on 2025 (out-of-sample) before going live.
 
 Note: user's tester showed deposit $3,000 and "Every tick" – asked to keep $100k + real ticks
 for comparability ($3k with 1% risk hits the 0.01-lot floor → real risk > 1%).

@@ -24,7 +24,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.21"
+#define EA_VERSION "2.22"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -139,7 +139,7 @@ input double             InpB_PartialR    = 1.0;            // Exit: partial at 
 input double             InpB_PartialPct  = 50.0;           // Exit: partial close %
 
 input group "=== S4 NY opening-range breakout ==="
-input bool               InpN_Enable      = true;           // Enable
+input bool               InpN_Enable      = false;          // Enable (R8/R9: no edge)
 input ENUM_EA_TRADE_MODE InpN_Mode        = EA_TRADE_BOTH;  // Direction
 input int                InpN_StartH      = 16;             // Range start hour (server; NY open = 16:30)
 input int                InpN_StartM      = 30;             // Range start minute
