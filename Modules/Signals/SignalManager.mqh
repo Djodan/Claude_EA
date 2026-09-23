@@ -2,7 +2,7 @@
 //|                                                SignalManager.mqh |
 //|  Owns the signal modules and combines them into one decision:    |
 //|   - the first TRIGGER module that fires provides the signal      |
-//|   - every FILTER module's bias must agree with its direction     |
+//|   - every FILTER module must Allow() that direction              |
 //+------------------------------------------------------------------+
 #ifndef CLAUDE_SIGNALMANAGER_MQH
 #define CLAUDE_SIGNALMANAGER_MQH
@@ -20,8 +20,7 @@ private:
         {
          if(m_modules[i].Role() != ROLE_FILTER)
             continue;
-         int bias = historic ? m_modules[i].BiasAt(t) : m_modules[i].Bias();
-         if(bias != (int)dir)
+         if(!m_modules[i].Allows(dir, historic, t))
             return false;
         }
       return true;
@@ -93,6 +92,22 @@ public:
       return false;
      }
 
+   //--- first trigger's signal on the last closed bar, ignoring filters
+   //    (used to exit positions on flips that filters block from entering)
+   bool              RawTrigger(SSignal &out)
+     {
+      out.Reset();
+      for(int i = 0; i < ArraySize(m_modules); i++)
+        {
+         if(m_modules[i].Role() != ROLE_TRIGGER || !m_modules[i].Ready())
+            continue;
+         m_modules[i].Last(out);
+         if(out.dir != SIG_NONE)
+            return true;
+        }
+      return false;
+     }
+
    //--- historic combined signals (for drawing on attach)
    int               History(SSignal &out[])
      {
@@ -120,6 +135,18 @@ public:
       for(int i = 0; i < ArraySize(m_modules); i++)
          if(m_modules[i].Ready())
             m_modules[i].DrawOverlay(drawer);
+     }
+
+   //--- one line per module for the dashboard
+   int               Statuses(string &lines[])
+     {
+      int n = ArraySize(m_modules);
+      ArrayResize(lines, n);
+      for(int i = 0; i < n; i++)
+         lines[i] = StringFormat("%s [%s] %s: %s", m_modules[i].Name(),
+                                 m_modules[i].Role() == ROLE_TRIGGER ? "trigger" : "filter",
+                                 StringSubstr(EnumToString(m_modules[i].Timeframe()), 7), m_modules[i].Status());
+      return n;
      }
 
    int               Total(void) const { return ArraySize(m_modules); }

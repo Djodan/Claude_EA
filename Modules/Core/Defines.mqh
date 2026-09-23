@@ -45,7 +45,8 @@ enum ENUM_SL_MODE
   {
    SL_NONE,        // No stop loss
    SL_ATR,         // ATR multiple
-   SL_POINTS       // Fixed points
+   SL_POINTS,      // Fixed points
+   SL_SIGNAL       // Signal's own stop (fallback ATR)
   };
 
 enum ENUM_TP_MODE
@@ -72,6 +73,8 @@ struct SSignal
    double            high;
    double            low;
    double            atr;         // volatility at the signal bar (for SL/TP/labels)
+   double            sl;          // suggested stop price from the module (0 = none)
+   double            tp;          // suggested target price from the module (0 = none)
    string            source;      // module name
 
    void              Reset(void)
@@ -83,6 +86,8 @@ struct SSignal
       high      = 0.0;
       low       = 0.0;
       atr       = 0.0;
+      sl        = 0.0;
+      tp        = 0.0;
       source    = "";
      }
   };

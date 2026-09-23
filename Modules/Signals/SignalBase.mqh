@@ -3,10 +3,11 @@
 //|  Base class for every signal module.                             |
 //|                                                                  |
 //|  To add a new module:                                            |
-//|   1. Derive from CSignalModule and implement Update().           |
+//|   1. Derive from CSeriesModule (bar-based) or CSignalModule.     |
 //|   2. In Update(), set m_last (signal on the last closed bar)     |
 //|      and m_bias (+1 / -1 / 0 current directional state).         |
-//|   3. Optionally override History(), BiasAt() and DrawOverlay().   |
+//|   3. Filters override Allows() (or AllowsAt() in CSeriesModule)  |
+//|      - directional filters can just rely on the bias.            |
 //|   4. Register it in Claude.mq5 with g_signals.Add(...) as a      |
 //|      ROLE_TRIGGER or ROLE_FILTER.                                |
 //+------------------------------------------------------------------+
@@ -56,11 +57,28 @@ public:
    //--- bias as it was known at time t (used to filter historic trigger signals)
    virtual int       BiasAt(const datetime t) { return m_bias; }
 
+   //--- filter decision: may a trigger signal in 'dir' pass?
+   //    historic = evaluate as of time t instead of the latest closed bar
+   virtual bool      Allows(const ENUM_SIGNAL_DIR dir, const bool historic, const datetime t)
+     {
+      int bias = historic ? BiasAt(t) : m_bias;
+      return bias == (int)dir;
+     }
+
+   //--- short text for the dashboard
+   virtual string    Status(void)
+     {
+      if(!m_ready)
+         return "waiting for data";
+      return m_bias > 0 ? "UP" : (m_bias < 0 ? "DOWN" : "FLAT");
+     }
+
    //--- optional module-specific chart overlay (lines, zones, ...)
    virtual void      DrawOverlay(CChartDrawer &drawer) {}
 
    //--- accessors
    string            Name(void)  const { return m_name; }
+   void              Name(const string name) { m_name = name; }
    ENUM_MODULE_ROLE  Role(void)  const { return m_role; }
    void              Role(const ENUM_MODULE_ROLE role) { m_role = role; }
    void              Timeframe(const ENUM_TIMEFRAMES tf) { m_ownTf = tf; }   // call before Init

@@ -1,142 +1,576 @@
 //+------------------------------------------------------------------+
 //|                                                       Claude.mq5 |
-//|  DJ Trend - Claude EA                                            |
+//|  Claude XAUUSD portfolio EA                                      |
 //|                                                                  |
-//|  Flow on every new closed bar:                                   |
-//|    signal modules -> CSignalManager -> drawer / alerts / trader  |
+//|  Inputs -> SEAConfig -> (optional preset) -> strategies          |
+//|  Each CStrategy = its own signal modules, timeframe, magic       |
+//|  (base + id), trade/risk settings and position management.       |
+//|  Guards (news, session, spread, daily limits) are shared.        |
+//|                                                                  |
+//|    S1 Trend     - DJ Trend flip (Pine port) + filters            |
+//|    S2 Breakout  - session range breakout (Asian -> London/NY)    |
+//|    S3 Pullback  - EMA trend + RSI dip entries                    |
 //|                                                                  |
 //|  Modules live in ./Modules:                                      |
-//|    Core/     shared types, new-bar detection                     |
-//|    Math/     Pine ta.* ports                                     |
-//|    Signals/  signal modules + manager (add new modules here)     |
-//|    Trade/    trade execution and position sizing                 |
-//|    Notify/   alerts                                              |
-//|    Visual/   chart objects                                       |
+//|    Core/     types, config, presets, new bar, tester reporting   |
+//|    Math/     Pine ta.* ports, shared ATR                         |
+//|    Signals/  trigger + filter modules and their manager          |
+//|    Strategy/ strategy container                                  |
+//|    Guards/   pre-trade checks                                    |
+//|    Manage/   open-position management                            |
+//|    Trade/    execution and position sizing                       |
+//|    Notify/   alerts          Visual/ chart objects, dashboard    |
+//|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#property version   "1.00"
-#property description "DJ Trend (Pine v6 port): MA basis on hlc3 with an ATR buffer; trades trend flips on closed bars."
+#define EA_VERSION "2.13"
+#define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
+#property version   EA_VERSION
+#property description "XAUUSD M1/M2 portfolio: DJ Trend, session breakout and trend pullback with shared news/session/spread guards."
 
 #include "Modules/Core/Defines.mqh"
-#include "Modules/Core/NewBar.mqh"
-#include "Modules/Signals/SignalManager.mqh"
+#include "Modules/Core/Config.mqh"
+#include "Modules/Core/Presets.mqh"
+#include "Modules/Core/TesterCriterion.mqh"
+#include "Modules/Core/TestReporter.mqh"
+#include "Modules/Core/CalendarExport.mqh"
+#include "Modules/Core/ExcursionTracker.mqh"
+#include "Modules/Strategy/Strategy.mqh"
 #include "Modules/Signals/SignalDJTrend.mqh"
-#include "Modules/Trade/RiskManager.mqh"
-#include "Modules/Trade/TradeManager.mqh"
+#include "Modules/Signals/SignalSessionBreakout.mqh"
+#include "Modules/Signals/SignalTrendPullback.mqh"
+#include "Modules/Signals/Filters/FilterADX.mqh"
+#include "Modules/Signals/Filters/FilterVolatility.mqh"
+#include "Modules/Signals/Filters/FilterSlope.mqh"
+#include "Modules/Guards/GuardManager.mqh"
+#include "Modules/Guards/GuardSession.mqh"
+#include "Modules/Guards/GuardSpread.mqh"
+#include "Modules/Guards/GuardDailyLimits.mqh"
+#include "Modules/Guards/GuardNews.mqh"
+#include "Modules/Manage/ManageBreakeven.mqh"
+#include "Modules/Manage/ManageTrailing.mqh"
+#include "Modules/Manage/ManagePartialClose.mqh"
+#include "Modules/Manage/ManageTimeExit.mqh"
+#include "Modules/Manage/ManageSessionClose.mqh"
 #include "Modules/Notify/AlertManager.mqh"
 #include "Modules/Visual/ChartDrawer.mqh"
+#include "Modules/Visual/Dashboard.mqh"
+
+//--- strategy ids (magic = base magic + id)
+#define STRAT_TREND    1
+#define STRAT_BREAKOUT 2
+#define STRAT_PULLBACK 3
 
 //--- Inputs ---------------------------------------------------------
-input group "=== DJ Trend Signal ==="
-input ENUM_TIMEFRAMES    InpSignalTF      = PERIOD_CURRENT; // Signal timeframe
-input ENUM_BASIS_TYPE    InpBasisType     = BASIS_EMA;      // Basis Type
-input int                InpBasisLen      = 34;             // Basis Length
-input int                InpAtrLen        = 14;             // ATR Length
-input double             InpSigMult       = 0.5;            // Signal Buffer (ATR x)
-input double             InpAlmaOffset    = 0.85;           // ALMA offset
-input double             InpAlmaSigma     = 6.0;            // ALMA sigma
-input int                InpLookback      = 500;            // Bars recalculated per update
+input group "=== General ==="
+input ENUM_EA_PRESET     InpPreset        = PRESET_BREAKOUT; // Preset (0 = use inputs below)
+input ulong              InpMagic         = 20260900;       // Base magic (strategies use +1, +2, +3)
+input int                InpDeviation     = 50;             // Max slippage (points)
+input ENUM_LOT_MODE      InpLotMode       = LOT_RISK_PERCENT; // Lot mode
+input double             InpFixedLots     = 0.10;           // Fixed lots
+input double             InpRiskPercent   = 1.0;            // Risk % of equity per trade (needs SL)
 
-input group "=== Trading ==="
-input ENUM_EA_TRADE_MODE InpTradeMode     = EA_TRADE_BOTH;  // Trade mode
-input bool               InpCloseOpposite = true;           // Close opposite position on signal
-input int                InpMaxPositions  = 1;              // Max open positions
-input ulong              InpMagic         = 20260922;       // Magic number
-input int                InpDeviation     = 20;             // Max slippage (points)
-input string             InpComment       = "DJ Trend";     // Order comment
+input group "=== S1 Trend: DJ Trend flip ==="
+input bool               InpT_Enable      = true;           // Enable
+input ENUM_TIMEFRAMES    InpT_TF          = PERIOD_CURRENT; // Timeframe (current = chart)
+input ENUM_EA_TRADE_MODE InpT_Mode        = EA_TRADE_BOTH;  // Direction
+input ENUM_BASIS_TYPE    InpT_BasisType   = BASIS_EMA;      // Basis type
+input int                InpT_BasisLen    = 34;             // Basis length
+input int                InpT_AtrLen      = 14;             // ATR length
+input double             InpT_SigMult     = 0.5;            // Signal buffer (ATR x)
+input double             InpT_AlmaOffset  = 0.85;           // ALMA offset
+input double             InpT_AlmaSigma   = 6.0;            // ALMA sigma
+input int                InpT_Lookback    = 500;            // Bars recalculated per update
+input bool               InpT_CloseOpp    = true;           // Close opposite position on signal
+input bool               InpT_ExitOnFlip  = false;          // Filtered flips still close opposite position
+input ENUM_SL_MODE       InpT_SLMode      = SL_ATR;         // Stop loss mode
+input double             InpT_SLAtr       = 3.0;            // SL ATR multiple
+input ENUM_TP_MODE       InpT_TPMode      = TP_NONE;        // Take profit mode
+input double             InpT_TPAtr       = 3.0;            // TP ATR multiple
+input double             InpT_TPRR        = 2.0;            // TP risk:reward
+input bool               InpT_UseHTF      = false;          // Filter: HTF DJ Trend
+input ENUM_TIMEFRAMES    InpT_HTF         = PERIOD_CURRENT; // Filter: HTF timeframe (current = auto)
+input bool               InpT_UseADX      = false;          // Filter: ADX
+input double             InpT_AdxMin      = 20.0;           // Filter: ADX minimum
+input bool               InpT_UseVol      = true;           // Filter: volatility regime
+input int                InpT_VolAvgLen   = 100;            // Filter: ATR average length
+input double             InpT_VolMin      = 0.8;            // Filter: min ATR / avg ATR (0 = off)
+input double             InpT_VolMax      = 0.0;            // Filter: max ATR / avg ATR (0 = off)
+input bool               InpT_UseSlope    = false;          // Filter: MA slope
+input double             InpT_SlopeMin    = 0.15;           // Filter: min slope (ATR units)
+input bool               InpT_UseBE       = false;          // Exit: breakeven
+input double             InpT_BETrigger   = 1.0;            // Exit: BE trigger (ATR x)
+input bool               InpT_UseTrail    = false;          // Exit: ATR trailing stop
+input double             InpT_TrailStart  = 3.0;            // Exit: trail start (ATR x)
+input double             InpT_TrailDist   = 3.0;            // Exit: trail distance (ATR x)
 
-input group "=== Position Sizing ==="
-input ENUM_LOT_MODE      InpLotMode       = LOT_FIXED;      // Lot mode
-input double             InpFixedLots     = 0.01;           // Fixed lots
-input double             InpRiskPercent   = 1.0;            // Risk % of equity (needs SL)
+input group "=== S2 Breakout: session range ==="
+input bool               InpB_Enable      = true;           // Enable
+input ENUM_TIMEFRAMES    InpB_TF          = PERIOD_CURRENT; // Timeframe (current = chart)
+input ENUM_EA_TRADE_MODE InpB_Mode        = EA_TRADE_BOTH;  // Direction
+input int                InpB_RangeStartH = 1;              // Range start hour (server)
+input int                InpB_RangeStartM = 0;              // Range start minute
+input int                InpB_RangeEndH   = 9;              // Range end hour (server)
+input int                InpB_RangeEndM   = 0;              // Range end minute
+input int                InpB_TradeEndH   = 17;             // Last entry hour (server)
+input double             InpB_BufferAtr   = 0.2;            // Breakout buffer (ATR x)
+input double             InpB_MinRangeAtr = 0.0;            // Min range width (ATR x, 0 = off)
+input double             InpB_MaxRangeAtr = 0.0;            // Max range width (ATR x, 0 = off)
+input int                InpB_AtrLen      = 14;             // ATR length
+input ENUM_BRK_STOP      InpB_StopMode    = BRK_STOP_RANGE; // Stop placement
+input bool               InpB_OnePerDay   = true;           // One breakout per day
+input double             InpB_SLAtr       = 3.0;            // Fallback SL (ATR x)
+input ENUM_TP_MODE       InpB_TPMode      = TP_RR;          // Take profit mode
+input double             InpB_TPRR        = 2.0;            // TP risk:reward
+input double             InpB_TPAtr       = 4.0;            // TP ATR multiple
+input bool               InpB_EOD         = true;           // Close at session end
+input int                InpB_EODHour     = 23;             // Session end hour (server)
+input bool               InpB_UseBE       = false;          // Exit: breakeven
+input double             InpB_BETrigger   = 1.5;            // Exit: BE trigger (ATR x)
 
-input group "=== Stop Loss / Take Profit ==="
-input ENUM_SL_MODE       InpSLMode        = SL_NONE;        // Stop loss mode
-input double             InpSLAtrMult     = 1.5;            // SL ATR multiple
-input int                InpSLPoints      = 500;            // SL points
-input ENUM_TP_MODE       InpTPMode        = TP_NONE;        // Take profit mode
-input double             InpTPAtrMult     = 3.0;            // TP ATR multiple
-input int                InpTPPoints      = 1000;           // TP points
-input double             InpTPRR          = 2.0;            // TP Risk:Reward
+input group "=== S3 Pullback: EMA trend + RSI dip ==="
+input bool               InpP_Enable      = true;           // Enable
+input ENUM_TIMEFRAMES    InpP_TF          = PERIOD_CURRENT; // Timeframe (current = chart)
+input ENUM_EA_TRADE_MODE InpP_Mode        = EA_TRADE_BOTH;  // Direction
+input int                InpP_FastLen     = 50;             // Fast EMA
+input int                InpP_SlowLen     = 200;            // Slow EMA
+input int                InpP_RsiLen      = 14;             // RSI length
+input double             InpP_RsiLow      = 40.0;           // Long: RSI crosses up through
+input double             InpP_RsiHigh     = 60.0;           // Short: RSI crosses down through
+input int                InpP_AtrLen      = 14;             // ATR length
+input double             InpP_SLAtr       = 3.0;            // SL ATR multiple
+input ENUM_TP_MODE       InpP_TPMode      = TP_ATR;         // Take profit mode
+input double             InpP_TPAtr       = 4.5;            // TP ATR multiple
+input double             InpP_TPRR        = 1.5;            // TP risk:reward
+input bool               InpP_UseTrail    = false;          // Exit: ATR trailing stop
+input double             InpP_TrailStart  = 2.0;            // Exit: trail start (ATR x)
+input double             InpP_TrailDist   = 2.0;            // Exit: trail distance (ATR x)
+input int                InpP_MaxBars     = 0;              // Exit: close after N bars (0 = off)
+
+input group "=== Guard: News ==="
+input bool               InpUseNews       = true;           // Block entries around news
+input string             InpNewsCurrencies= "USD";          // Currencies
+input int                InpNewsImportance= 3;              // Min importance (1 low - 3 high)
+input int                InpNewsBefore    = 30;             // Minutes before event
+input int                InpNewsAfter     = 30;             // Minutes after event
+input string             InpNewsExclude   = "Crude Oil";    // Ignore events containing (comma-separated)
+input bool               InpNewsExport    = true;           // Export calendar when run on a live chart
+input datetime           InpNewsFrom      = D'2025.06.01';  // Export from
+
+input group "=== Guard: Session / Spread / Daily ==="
+input bool               InpUseSession    = false;          // Session filter (server time)
+input int                InpSessStartH    = 9;              // Start hour
+input int                InpSessEndH      = 22;             // End hour
+input bool               InpTradeFri      = true;           // Trade Fridays
+input int                InpMaxSpread     = 60;             // Max spread points (0 = off)
+input bool               InpUseDaily      = false;          // Daily limits
+input double             InpDailyMaxLoss  = 3.0;            // Max daily loss %
+input int                InpDailyMaxTrades= 0;              // Max trades per day (0 = off)
 
 input group "=== Alerts ==="
-input bool               InpAlertPopup    = true;           // Popup alert
+input bool               InpAlertPopup    = false;          // Popup alert
 input bool               InpAlertPush     = false;          // Push notification
-input bool               InpAlertEmail    = false;          // Email
-input bool               InpAlertSound    = false;          // Sound (when popup off)
-input string             InpAlertSoundFile= "alert.wav";    // Sound file
 
 input group "=== Chart ==="
 input bool               InpDrawSignals   = true;           // Draw signals
 input bool               InpDrawHistory   = true;           // Draw historic signals on attach
-input bool               InpDrawBasis     = true;           // Draw basis line
-input int                InpBasisBars     = 300;            // Basis line length (bars)
-input string             InpBuyText       = "BUY";          // Buy label text
-input string             InpSellText      = "SELL";         // Sell label text
+input bool               InpDrawBasis     = true;           // Draw DJ Trend basis line
 input color              InpBuyColor      = C'30,158,74';   // Buy colour
 input color              InpSellColor     = C'224,21,27';   // Sell colour
-input int                InpFontSize      = 9;              // Label font size
+input int                InpFontSize      = 8;              // Label font size
+input bool               InpShowDashboard = true;           // Show dashboard
+
+input group "=== Strategy Tester ==="
+input ENUM_TESTER_CRITERION InpCriterion  = TC_PROFIT_DD_PCT; // Custom optimisation criterion
+input int                InpMinTrades     = 30;             // Min trades for a valid pass
+input bool               InpReportResults = true;           // Write results CSVs (Common\Files\ClaudeEA)
+input bool               InpExportTrades  = true;           // Export trade list (single runs)
 
 //--- Globals --------------------------------------------------------
-CSignalManager g_signals;
-CRiskManager   g_risk;
-CTradeManager  g_trader;
-CAlertManager  g_alerts;
-CChartDrawer   g_drawer;
-CNewBar        g_newBar;
-
-string          g_symbol;
-ENUM_TIMEFRAMES g_tf;
+SEAConfig        g_cfg;
+CStrategy       *g_strategies[];
+CGuardManager    g_guards;
+CAlertManager    g_alerts;
+CChartDrawer     g_drawer;
+CDashboard       g_dashboard;
+CExcursionTracker g_excursions;
+string           g_symbol;
+datetime         g_testStart;
+string           g_stratNames[] = {"Trend", "Breakout", "Pullback"};   // index = id - 1
 
 //+------------------------------------------------------------------+
-//| Module registration - add new signal modules here                |
+//| Inputs -> config                                                 |
 //+------------------------------------------------------------------+
-bool RegisterSignalModules(void)
+void DefaultExits(SExitSettings &e)
   {
-   SDJTrendSettings dj;
-   dj.basisType  = InpBasisType;
-   dj.basisLen   = InpBasisLen;
-   dj.atrLen     = InpAtrLen;
-   dj.sigMult    = InpSigMult;
-   dj.almaOffset = InpAlmaOffset;
-   dj.almaSigma  = InpAlmaSigma;
-   dj.lookback   = InpLookback;
-   dj.drawBasis  = InpDrawBasis;
-   dj.basisBars  = InpBasisBars;
-   dj.upColor    = InpBuyColor;
-   dj.downColor  = InpSellColor;
-   dj.flatColor  = clrGray;
+   e.usePartial      = false;
+   e.partialAtr      = 1.5;
+   e.partialPct      = 50.0;
+   e.partialBE       = true;
+   e.useBE           = false;
+   e.beTriggerAtr    = 1.0;
+   e.beLockAtr       = 0.1;
+   e.useTrail        = false;
+   e.trailStartAtr   = 2.0;
+   e.trailDistAtr    = 2.0;
+   e.trailStepAtr    = 0.1;
+   e.useTimeExit     = false;
+   e.timeExitBars    = 0;
+   e.timeExitLosing  = false;
+   e.useSessionClose = false;
+   e.closeHour       = 23;
+   e.closeMinute     = 0;
+  }
 
-   CSignalDJTrend *djTrend = new CSignalDJTrend();
-   djTrend.Configure(dj);
-   if(!g_signals.Add(djTrend, ROLE_TRIGGER))
-      return false;
+void DefaultTrade(STradeSettings &t, const ENUM_EA_TRADE_MODE mode)
+  {
+   t.mode            = mode;
+   t.closeOnOpposite = true;
+   t.maxPositions    = 1;
+   t.slMode          = SL_ATR;
+   t.slAtrMult       = 2.0;
+   t.slPoints        = 0;
+   t.tpMode          = TP_NONE;
+   t.tpAtrMult       = 3.0;
+   t.tpPoints        = 0;
+   t.tpRR            = 2.0;
+   t.magic           = InpMagic;
+   t.deviation       = InpDeviation;
+   t.comment         = "";
+  }
 
-   // Example: a higher-timeframe DJ Trend as a trend filter
-   //   CSignalDJTrend *htf = new CSignalDJTrend();
-   //   htf.Configure(dj);
-   //   htf.Timeframe(PERIOD_H4);
-   //   g_signals.Add(htf, ROLE_FILTER);   // BUY only when H4 trend is up, SELL only when down
+void BuildConfig(SEAConfig &c)
+  {
+   //--- S1 Trend
+   c.trend.s.enabled            = InpT_Enable;
+   c.trend.s.tf                 = InpT_TF;
+   c.trend.s.atrLen             = InpT_AtrLen;
+   c.trend.s.exitOnFilteredFlip = InpT_ExitOnFlip;
+   DefaultTrade(c.trend.s.trade, InpT_Mode);
+   c.trend.s.trade.closeOnOpposite = InpT_CloseOpp;
+   c.trend.s.trade.slMode       = InpT_SLMode;
+   c.trend.s.trade.slAtrMult    = InpT_SLAtr;
+   c.trend.s.trade.tpMode       = InpT_TPMode;
+   c.trend.s.trade.tpAtrMult    = InpT_TPAtr;
+   c.trend.s.trade.tpRR         = InpT_TPRR;
+   DefaultExits(c.trend.s.exits);
+   c.trend.s.exits.useBE         = InpT_UseBE;
+   c.trend.s.exits.beTriggerAtr  = InpT_BETrigger;
+   c.trend.s.exits.useTrail      = InpT_UseTrail;
+   c.trend.s.exits.trailStartAtr = InpT_TrailStart;
+   c.trend.s.exits.trailDistAtr  = InpT_TrailDist;
 
-   return true;
+   c.trend.dj.basisType  = InpT_BasisType;
+   c.trend.dj.basisLen   = InpT_BasisLen;
+   c.trend.dj.atrLen     = InpT_AtrLen;
+   c.trend.dj.sigMult    = InpT_SigMult;
+   c.trend.dj.almaOffset = InpT_AlmaOffset;
+   c.trend.dj.almaSigma  = InpT_AlmaSigma;
+   c.trend.dj.lookback   = InpT_Lookback;
+   c.trend.dj.drawBasis  = InpDrawBasis;
+   c.trend.dj.basisBars  = 300;
+   c.trend.dj.upColor    = InpBuyColor;
+   c.trend.dj.downColor  = InpSellColor;
+   c.trend.dj.flatColor  = clrGray;
+
+   c.trend.useHTF = InpT_UseHTF;
+   c.trend.htf    = InpT_HTF;
+   c.trend.useADX            = InpT_UseADX;
+   c.trend.adx.diLen         = 14;
+   c.trend.adx.adxLen        = 14;
+   c.trend.adx.minAdx        = InpT_AdxMin;
+   c.trend.adx.requireDI     = false;
+   c.trend.adx.requireRising = false;
+   c.trend.adx.lookback      = InpT_Lookback;
+   c.trend.useVol       = InpT_UseVol;
+   c.trend.vol.atrLen   = InpT_AtrLen;
+   c.trend.vol.avgLen   = InpT_VolAvgLen;
+   c.trend.vol.minRatio = InpT_VolMin;
+   c.trend.vol.maxRatio = InpT_VolMax;
+   c.trend.vol.lookback = InpT_Lookback;
+   c.trend.useSlope          = InpT_UseSlope;
+   c.trend.slope.maType      = InpT_BasisType;
+   c.trend.slope.maLen       = InpT_BasisLen;
+   c.trend.slope.slopeBars   = 3;
+   c.trend.slope.minSlopeAtr = InpT_SlopeMin;
+   c.trend.slope.atrLen      = InpT_AtrLen;
+   c.trend.slope.almaOffset  = InpT_AlmaOffset;
+   c.trend.slope.almaSigma   = InpT_AlmaSigma;
+   c.trend.slope.lookback    = InpT_Lookback;
+
+   //--- S2 Breakout
+   c.brk.s.enabled            = InpB_Enable;
+   c.brk.s.tf                 = InpB_TF;
+   c.brk.s.atrLen             = InpB_AtrLen;
+   c.brk.s.exitOnFilteredFlip = false;
+   DefaultTrade(c.brk.s.trade, InpB_Mode);
+   c.brk.s.trade.closeOnOpposite = true;
+   c.brk.s.trade.slMode       = SL_SIGNAL;
+   c.brk.s.trade.slAtrMult    = InpB_SLAtr;
+   c.brk.s.trade.tpMode       = InpB_TPMode;
+   c.brk.s.trade.tpRR         = InpB_TPRR;
+   c.brk.s.trade.tpAtrMult    = InpB_TPAtr;
+   DefaultExits(c.brk.s.exits);
+   c.brk.s.exits.useSessionClose = InpB_EOD;
+   c.brk.s.exits.closeHour       = InpB_EODHour;
+   c.brk.s.exits.useBE           = InpB_UseBE;
+   c.brk.s.exits.beTriggerAtr    = InpB_BETrigger;
+
+   c.brk.brk.rangeStartHour = InpB_RangeStartH;
+   c.brk.brk.rangeStartMin  = InpB_RangeStartM;
+   c.brk.brk.rangeEndHour   = InpB_RangeEndH;
+   c.brk.brk.rangeEndMin    = InpB_RangeEndM;
+   c.brk.brk.tradeEndHour   = InpB_TradeEndH;
+   c.brk.brk.tradeEndMin    = 0;
+   c.brk.brk.bufferAtr      = InpB_BufferAtr;
+   c.brk.brk.minRangeAtr    = InpB_MinRangeAtr;
+   c.brk.brk.maxRangeAtr    = InpB_MaxRangeAtr;
+   c.brk.brk.atrLen         = InpB_AtrLen;
+   c.brk.brk.stopMode       = InpB_StopMode;
+   c.brk.brk.oneTradePerDay = InpB_OnePerDay;
+   c.brk.brk.lookback       = 400;
+
+   //--- S3 Pullback
+   c.pb.s.enabled            = InpP_Enable;
+   c.pb.s.tf                 = InpP_TF;
+   c.pb.s.atrLen             = InpP_AtrLen;
+   c.pb.s.exitOnFilteredFlip = false;
+   DefaultTrade(c.pb.s.trade, InpP_Mode);
+   c.pb.s.trade.closeOnOpposite = true;
+   c.pb.s.trade.slMode       = SL_ATR;
+   c.pb.s.trade.slAtrMult    = InpP_SLAtr;
+   c.pb.s.trade.tpMode       = InpP_TPMode;
+   c.pb.s.trade.tpAtrMult    = InpP_TPAtr;
+   c.pb.s.trade.tpRR         = InpP_TPRR;
+   DefaultExits(c.pb.s.exits);
+   c.pb.s.exits.useTrail      = InpP_UseTrail;
+   c.pb.s.exits.trailStartAtr = InpP_TrailStart;
+   c.pb.s.exits.trailDistAtr  = InpP_TrailDist;
+   c.pb.s.exits.useTimeExit   = InpP_MaxBars > 0;
+   c.pb.s.exits.timeExitBars  = InpP_MaxBars;
+
+   c.pb.pb.fastLen  = InpP_FastLen;
+   c.pb.pb.slowLen  = InpP_SlowLen;
+   c.pb.pb.rsiLen   = InpP_RsiLen;
+   c.pb.pb.rsiLow   = InpP_RsiLow;
+   c.pb.pb.rsiHigh  = InpP_RsiHigh;
+   c.pb.pb.atrLen   = InpP_AtrLen;
+   c.pb.pb.lookback = 800;
+
+   //--- sizing
+   c.risk.lotMode     = InpLotMode;
+   c.risk.fixedLots   = InpFixedLots;
+   c.risk.riskPercent = InpRiskPercent;
+
+   //--- guards
+   c.useSession          = InpUseSession;
+   c.session.startHour   = InpSessStartH;
+   c.session.startMinute = 0;
+   c.session.endHour     = InpSessEndH;
+   c.session.endMinute   = 0;
+   for(int d = 0; d < 7; d++)
+      c.session.days[d] = (d >= 1 && d <= 4) || (d == 5 && InpTradeFri);
+   c.maxSpread = InpMaxSpread;
+   c.useDaily              = InpUseDaily;
+   c.daily.maxLossPct      = InpDailyMaxLoss;
+   c.daily.profitTargetPct = 0.0;
+   c.daily.maxTrades       = InpDailyMaxTrades;
+   c.daily.closeOnLimit    = true;
+   c.useNews            = InpUseNews;
+   c.news.currencies    = InpNewsCurrencies;
+   c.news.minImportance = InpNewsImportance;
+   c.news.minutesBefore = InpNewsBefore;
+   c.news.minutesAfter  = InpNewsAfter;
+   c.news.exclude       = InpNewsExclude;
   }
 
 //+------------------------------------------------------------------+
-//| Draw historic signals and module overlays                        |
+//| Strategy construction                                            |
+//+------------------------------------------------------------------+
+void AddExits(CStrategy *st, const SExitSettings &e)
+  {
+   if(e.usePartial)
+     {
+      CManagePartialClose *m = new CManagePartialClose();
+      m.Configure(e.partialAtr, e.partialPct, e.partialBE);
+      st.AddPositionModule(m);
+     }
+   if(e.useBE)
+     {
+      CManageBreakeven *m = new CManageBreakeven();
+      m.Configure(e.beTriggerAtr, e.beLockAtr);
+      st.AddPositionModule(m);
+     }
+   if(e.useTrail)
+     {
+      CManageTrailing *m = new CManageTrailing();
+      m.Configure(e.trailStartAtr, e.trailDistAtr, e.trailStepAtr);
+      st.AddPositionModule(m);
+     }
+   if(e.useTimeExit)
+     {
+      CManageTimeExit *m = new CManageTimeExit();
+      m.Configure(e.timeExitBars, e.timeExitLosing);
+      st.AddPositionModule(m);
+     }
+   if(e.useSessionClose)
+     {
+      CManageSessionClose *m = new CManageSessionClose();
+      m.Configure(e.closeHour, e.closeMinute);
+      st.AddPositionModule(m);
+     }
+  }
+
+bool StartStrategy(CStrategy *st, const int id, const SStrategyCommon &s)
+  {
+   ENUM_TIMEFRAMES tf = (s.tf == PERIOD_CURRENT) ? (ENUM_TIMEFRAMES)_Period : s.tf;
+   AddExits(st, s.exits);
+   if(!st.Init(g_symbol, tf, InpMagic + id, s.trade, g_cfg.risk, s.atrLen, s.exitOnFilteredFlip, GetPointer(g_guards)))
+     {
+      PrintFormat("Strategy %s failed to initialise", st.Name());
+      delete st;
+      return false;
+     }
+   int n = ArraySize(g_strategies);
+   ArrayResize(g_strategies, n + 1);
+   g_strategies[n] = st;
+   return true;
+  }
+
+bool BuildTrend(const STrendConfig &c)
+  {
+   ENUM_TIMEFRAMES tf = (c.s.tf == PERIOD_CURRENT) ? (ENUM_TIMEFRAMES)_Period : c.s.tf;
+   CStrategy *st = new CStrategy(g_stratNames[STRAT_TREND - 1]);
+   CSignalDJTrend *dj = new CSignalDJTrend();
+   dj.Configure(c.dj);
+   st.AddSignal(dj, ROLE_TRIGGER);
+   if(c.useHTF)
+     {
+      SDJTrendSettings h = c.dj;
+      h.drawBasis = false;
+      CSignalDJTrend *htf = new CSignalDJTrend();
+      htf.Configure(h);
+      htf.Name("DJTrend HTF");
+      htf.Timeframe(c.htf == PERIOD_CURRENT ? AutoHigherTimeframe(tf) : c.htf);
+      st.AddSignal(htf, ROLE_FILTER);
+     }
+   if(c.useADX)
+     {
+      CFilterADX *f = new CFilterADX();
+      f.Configure(c.adx);
+      st.AddSignal(f, ROLE_FILTER);
+     }
+   if(c.useVol)
+     {
+      CFilterVolatility *f = new CFilterVolatility();
+      f.Configure(c.vol);
+      st.AddSignal(f, ROLE_FILTER);
+     }
+   if(c.useSlope)
+     {
+      CFilterSlope *f = new CFilterSlope();
+      f.Configure(c.slope);
+      st.AddSignal(f, ROLE_FILTER);
+     }
+   return StartStrategy(st, STRAT_TREND, c.s);
+  }
+
+bool BuildBreakout(const SBreakoutConfig &c)
+  {
+   CStrategy *st = new CStrategy(g_stratNames[STRAT_BREAKOUT - 1]);
+   CSignalSessionBreakout *b = new CSignalSessionBreakout();
+   b.Configure(c.brk);
+   st.AddSignal(b, ROLE_TRIGGER);
+   return StartStrategy(st, STRAT_BREAKOUT, c.s);
+  }
+
+bool BuildPullback(const SPullbackConfig &c)
+  {
+   CStrategy *st = new CStrategy(g_stratNames[STRAT_PULLBACK - 1]);
+   CSignalTrendPullback *p = new CSignalTrendPullback();
+   p.Configure(c.pb);
+   st.AddSignal(p, ROLE_TRIGGER);
+   return StartStrategy(st, STRAT_PULLBACK, c.s);
+  }
+
+bool RegisterGuards(const SEAConfig &c)
+  {
+   if(c.useNews)
+     {
+      CGuardNews *g = new CGuardNews();
+      g.Configure(c.news);
+      g_guards.Add(g);
+     }
+   if(c.useSession)
+     {
+      CGuardSession *g = new CGuardSession();
+      g.Configure(c.session);
+      g_guards.Add(g);
+     }
+   if(c.maxSpread > 0)
+     {
+      CGuardSpread *g = new CGuardSpread();
+      g.Configure(c.maxSpread);
+      g_guards.Add(g);
+     }
+   if(c.useDaily)
+     {
+      CGuardDailyLimits *g = new CGuardDailyLimits();
+      g.Configure(c.daily);
+      g_guards.Add(g);
+     }
+   return g_guards.Init(g_symbol, InpMagic);
+  }
+
+//+------------------------------------------------------------------+
+//| Chart + dashboard                                                |
 //+------------------------------------------------------------------+
 void DrawChart(const bool withHistory)
   {
    if(!g_drawer.CanDraw())
       return;
-   if(withHistory && g_drawer.DrawHistory())
+   for(int k = 0; k < ArraySize(g_strategies); k++)
      {
-      SSignal hist[];
-      int n = g_signals.History(hist);
-      for(int i = 0; i < n; i++)
-         g_drawer.DrawSignal(hist[i]);
+      if(withHistory && g_drawer.DrawHistory())
+        {
+         SSignal hist[];
+         int n = g_strategies[k].History(hist);
+         for(int i = 0; i < n; i++)
+            g_drawer.DrawSignal(hist[i]);
+        }
+      g_strategies[k].DrawOverlays(g_drawer);
      }
-   g_signals.DrawOverlays(g_drawer);
    g_drawer.Redraw();
+  }
+
+void AppendLine(string &dst[], const string line)
+  {
+   int n = ArraySize(dst);
+   ArrayResize(dst, n + 1);
+   dst[n] = line;
+  }
+
+void UpdateDashboard(void)
+  {
+   if(!g_dashboard.Enabled())
+      return;
+   string lines[], part[];
+   AppendLine(lines, StringFormat("Claude XAUUSD EA v%s (build %s)  %s  preset %d", EA_VERSION, EA_BUILD, g_symbol, (int)InpPreset));
+   for(int k = 0; k < ArraySize(g_strategies); k++)
+     {
+      g_strategies[k].Statuses(part);
+      for(int i = 0; i < ArraySize(part); i++)
+         AppendLine(lines, part[i]);
+     }
+   if(g_guards.Total() > 0)
+     {
+      AppendLine(lines, "Guards:");
+      g_guards.Statuses(part);
+      for(int i = 0; i < ArraySize(part); i++)
+         AppendLine(lines, "  " + part[i]);
+     }
+   g_dashboard.Show(lines);
+   ChartRedraw(0);
   }
 
 //+------------------------------------------------------------------+
@@ -144,65 +578,55 @@ void DrawChart(const bool withHistory)
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   g_symbol = _Symbol;
-   g_tf     = (InpSignalTF == PERIOD_CURRENT) ? (ENUM_TIMEFRAMES)_Period : InpSignalTF;
+   g_symbol    = _Symbol;
+   g_testStart = TimeCurrent();
+   g_excursions.Init(_Symbol, InpMagic);
 
-   //--- visuals
+   BuildConfig(g_cfg);
+   ApplyPreset(InpPreset, g_cfg);
+   PrintFormat("Claude EA v%s build %s: preset %d -> %s", EA_VERSION, EA_BUILD, (int)InpPreset, ConfigSummary(g_cfg));
+
+   if(InpNewsExport && !MQLInfoInteger(MQL_TESTER))
+      ExportCalendar(InpNewsFrom, TimeCurrent() + 14 * 86400);
+
+   string prefix = "CLD_" + IntegerToString((long)InpMagic) + "_";
    SDrawSettings draw;
    draw.enabled     = InpDrawSignals || InpDrawBasis;
    draw.drawSignals = InpDrawSignals;
    draw.drawHistory = InpDrawHistory;
-   draw.buyText     = InpBuyText;
-   draw.sellText    = InpSellText;
+   draw.buyText     = "BUY";
+   draw.sellText    = "SELL";
    draw.buyColor    = InpBuyColor;
    draw.sellColor   = InpSellColor;
    draw.fontSize    = InpFontSize;
-   g_drawer.Init("CLD_" + IntegerToString((long)InpMagic) + "_", draw);
+   g_drawer.Init(prefix, draw);
+   g_dashboard.Init(prefix + "dash_", InpShowDashboard, 10, 25, InpFontSize);
 
-   //--- signals
-   if(!RegisterSignalModules() || !g_signals.Init(g_symbol, g_tf))
+   if(!RegisterGuards(g_cfg))
       return INIT_PARAMETERS_INCORRECT;
+   if(g_cfg.trend.s.enabled && !BuildTrend(g_cfg.trend))
+      return INIT_PARAMETERS_INCORRECT;
+   if(g_cfg.brk.s.enabled && !BuildBreakout(g_cfg.brk))
+      return INIT_PARAMETERS_INCORRECT;
+   if(g_cfg.pb.s.enabled && !BuildPullback(g_cfg.pb))
+      return INIT_PARAMETERS_INCORRECT;
+   if(ArraySize(g_strategies) == 0)
+     {
+      Print("No strategy enabled");
+      return INIT_PARAMETERS_INCORRECT;
+     }
 
-   //--- sizing & trading
-   SRiskSettings risk;
-   risk.lotMode     = InpLotMode;
-   risk.fixedLots   = InpFixedLots;
-   risk.riskPercent = InpRiskPercent;
-   g_risk.Init(g_symbol, risk);
-
-   STradeSettings trade;
-   trade.mode            = InpTradeMode;
-   trade.closeOnOpposite = InpCloseOpposite;
-   trade.maxPositions    = MathMax(1, InpMaxPositions);
-   trade.slMode          = InpSLMode;
-   trade.slAtrMult       = InpSLAtrMult;
-   trade.slPoints        = InpSLPoints;
-   trade.tpMode          = InpTPMode;
-   trade.tpAtrMult       = InpTPAtrMult;
-   trade.tpPoints        = InpTPPoints;
-   trade.tpRR            = InpTPRR;
-   trade.magic           = InpMagic;
-   trade.deviation       = InpDeviation;
-   trade.comment         = InpComment;
-   if(!g_trader.Init(g_symbol, trade, GetPointer(g_risk)))
-      return INIT_FAILED;
-
-   //--- alerts
    SAlertSettings alerts;
-   alerts.title     = "DJ Trend";
+   alerts.title     = "Claude EA";
    alerts.popup     = InpAlertPopup;
    alerts.push      = InpAlertPush;
-   alerts.email     = InpAlertEmail;
-   alerts.sound     = InpAlertSound;
-   alerts.soundFile = InpAlertSoundFile;
+   alerts.email     = false;
+   alerts.sound     = false;
+   alerts.soundFile = "alert.wav";
    g_alerts.Init(g_symbol, alerts);
 
-   //--- prime modules with history (no trading on the bar we attach to)
-   g_newBar.Init(g_symbol, g_tf);
-   SSignal ignored;
-   g_signals.Update(ignored);
    DrawChart(true);
-
+   UpdateDashboard();
    return INIT_SUCCEEDED;
   }
 
@@ -211,8 +635,15 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
   {
-   g_signals.Deinit();
+   for(int k = 0; k < ArraySize(g_strategies); k++)
+     {
+      g_strategies[k].Deinit();
+      delete g_strategies[k];
+     }
+   ArrayResize(g_strategies, 0);
+   g_guards.Deinit();
    g_drawer.Clear();
+   g_dashboard.Clear();
    ChartRedraw(0);
   }
 
@@ -221,23 +652,47 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
-   if(!g_newBar.IsNew())
-      return;
-
-   SSignal sig;
-   bool fired = g_signals.Update(sig);
+   g_excursions.OnTick();
+   g_guards.OnTick();
+   bool anyFired = false;
+   for(int k = 0; k < ArraySize(g_strategies); k++)
+     {
+      SSignal sig;
+      if(g_strategies[k].OnTick(sig))
+        {
+         anyFired = true;
+         g_drawer.DrawSignal(sig);
+         g_alerts.Notify(sig);
+        }
+     }
 
    // history may have been unavailable at attach time (e.g. tester start)
    static bool historyDrawn = false;
-   DrawChart(!historyDrawn);
-   historyDrawn = true;
+   static datetime lastDash = 0;
+   if(!historyDrawn || anyFired || TimeCurrent() - lastDash >= 1)
+     {
+      DrawChart(!historyDrawn);
+      historyDrawn = true;
+      lastDash = TimeCurrent();
+      UpdateDashboard();
+     }
+  }
 
-   if(!fired)
-      return;
-
-   g_drawer.DrawSignal(sig);
-   g_drawer.Redraw();
-   g_alerts.Notify(sig);
-   g_trader.OnSignal(sig);
+//+------------------------------------------------------------------+
+//| Custom optimisation criterion ("Custom max") + result export     |
+//+------------------------------------------------------------------+
+double OnTester()
+  {
+   double score = CTesterCriterion::Calculate(InpCriterion, InpMinTrades);
+   if(InpReportResults)
+     {
+      string build  = EA_VERSION + " " + EA_BUILD;
+      string config = ConfigSummary(g_cfg);
+      CTestReporter::WriteSummary(g_symbol, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, score);
+      CTestReporter::WriteStrategyStats(g_symbol, (ENUM_TIMEFRAMES)_Period, (int)InpPreset, build, config, InpMagic, g_stratNames);
+     }
+   if(InpExportTrades && !MQLInfoInteger(MQL_OPTIMIZATION))
+      CTestReporter::WriteTrades(g_symbol, (ENUM_TIMEFRAMES)_Period, InpMagic, (int)InpPreset, GetPointer(g_excursions));
+   return score;
   }
 //+------------------------------------------------------------------+

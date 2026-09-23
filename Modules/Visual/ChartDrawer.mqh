@@ -73,7 +73,7 @@ public:
       string text = SignalName(s, "text");
       if(ObjectFind(0, text) < 0)
          ObjectCreate(0, text, OBJ_TEXT, 0, s.barTime, textPrice);
-      ObjectSetString(0, text, OBJPROP_TEXT, isBuy ? m_cfg.buyText : m_cfg.sellText);
+      ObjectSetString(0, text, OBJPROP_TEXT, (isBuy ? m_cfg.buyText : m_cfg.sellText) + " " + s.source);
       ObjectSetString(0, text, OBJPROP_FONT, "Arial Bold");
       ObjectSetInteger(0, text, OBJPROP_FONTSIZE, m_cfg.fontSize);
       ObjectSetInteger(0, text, OBJPROP_ANCHOR, isBuy ? ANCHOR_UPPER : ANCHOR_LOWER);

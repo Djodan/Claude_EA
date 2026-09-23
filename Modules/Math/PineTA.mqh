@@ -180,6 +180,92 @@ public:
       TrueRange(high, low, close, n, tr);
       RMA(tr, n, len, out);
      }
+
+   //--- ta.rsi (Wilder smoothing of gains / losses)
+   static void       RSI(const double &src[], const int n, const int len, double &out[])
+     {
+      double up[], down[];
+      Fill(up, n);
+      Fill(down, n);
+      for(int i = 1; i < n; i++)
+        {
+         double ch = src[i] - src[i - 1];
+         up[i]   = MathMax(ch, 0.0);
+         down[i] = MathMax(-ch, 0.0);
+        }
+      double ru[], rd[];
+      RMA(up, n, len, ru);
+      RMA(down, n, len, rd);
+      Fill(out, n);
+      for(int i = 0; i < n; i++)
+        {
+         if(IsNA(ru[i]) || IsNA(rd[i]))
+            continue;
+         out[i] = (rd[i] == 0.0) ? 100.0 : (ru[i] == 0.0 ? 0.0 : 100.0 - 100.0 / (1.0 + ru[i] / rd[i]));
+        }
+     }
+
+   //--- dispatch to any supported moving-average type
+   static void       MA(const ENUM_BASIS_TYPE type, const double &src[], const int n, const int len,
+                        const double almaOffset, const double almaSigma, double &out[])
+     {
+      switch(type)
+        {
+         case BASIS_SMA:
+            SMA(src, n, len, out);
+            break;
+         case BASIS_HMA:
+            HMA(src, n, len, out);
+            break;
+         case BASIS_ALMA:
+            ALMA(src, n, len, almaOffset, almaSigma, out);
+            break;
+         default:
+            EMA(src, n, len, out);
+            break;
+        }
+     }
+
+   //--- ta.dmi(diLen, adxLen) -> +DI, -DI, ADX
+   static void       DMI(const double &high[], const double &low[], const double &close[], const int n,
+                         const int diLen, const int adxLen, double &plus[], double &minus[], double &adx[])
+     {
+      double plusDM[], minusDM[], tr[];
+      Fill(plusDM, n);
+      Fill(minusDM, n);
+      Fill(tr, n);
+      for(int i = 1; i < n; i++)   // bar 0 has no previous bar: na, as in Pine
+        {
+         double up   = high[i] - high[i - 1];
+         double down = low[i - 1] - low[i];
+         plusDM[i]  = (up > down && up > 0.0) ? up : 0.0;
+         minusDM[i] = (down > up && down > 0.0) ? down : 0.0;
+         tr[i] = MathMax(high[i] - low[i], MathMax(MathAbs(high[i] - close[i - 1]), MathAbs(low[i] - close[i - 1])));
+        }
+
+      double trur[], pSm[], mSm[], dx[];
+      RMA(tr, n, diLen, trur);
+      RMA(plusDM, n, diLen, pSm);
+      RMA(minusDM, n, diLen, mSm);
+
+      Fill(plus, n);
+      Fill(minus, n);
+      Fill(dx, n);
+      for(int i = 0; i < n; i++)
+        {
+         if(IsNA(trur[i]) || IsNA(pSm[i]) || IsNA(mSm[i]) || trur[i] == 0.0)
+            continue;
+         plus[i]  = 100.0 * pSm[i] / trur[i];
+         minus[i] = 100.0 * mSm[i] / trur[i];
+         double sum = plus[i] + minus[i];
+         dx[i] = MathAbs(plus[i] - minus[i]) / (sum == 0.0 ? 1.0 : sum);
+        }
+
+      RMA(dx, n, adxLen, adx);
+      for(int i = 0; i < n; i++)
+         if(!IsNA(adx[i]))
+            adx[i] *= 100.0;
+     }
   };
 
 #endif

@@ -8,6 +8,7 @@
 #include <Trade/Trade.mqh>
 #include "../Core/Defines.mqh"
 #include "RiskManager.mqh"
+#include "../Guards/GuardManager.mqh"
 
 struct STradeSettings
   {
@@ -33,6 +34,7 @@ private:
    STradeSettings    m_cfg;
    CTrade            m_trade;
    CRiskManager     *m_risk;
+   CGuardManager    *m_guards;
 
    double            NormalizePrice(const double price) const
      {
@@ -65,11 +67,15 @@ private:
         }
      }
 
-   double            CalcSL(const ENUM_SIGNAL_DIR dir, const double entry, const double atr) const
+   double            CalcSL(const ENUM_SIGNAL_DIR dir, const double entry, const double atr, const double signalSL) const
      {
       double dist = 0.0;
-      if(m_cfg.slMode == SL_ATR)
-         dist = m_cfg.slAtrMult * atr;
+      bool   signalOk = signalSL > 0.0 && (dir == SIG_BUY ? signalSL < entry : signalSL > entry);
+      if(m_cfg.slMode == SL_SIGNAL && signalOk)
+         dist = MathAbs(entry - signalSL);
+      else
+         if(m_cfg.slMode == SL_ATR || m_cfg.slMode == SL_SIGNAL)
+            dist = m_cfg.slAtrMult * atr;
       else
          if(m_cfg.slMode == SL_POINTS)
             dist = m_cfg.slPoints * SymbolInfoDouble(m_symbol, SYMBOL_POINT);
@@ -79,8 +85,10 @@ private:
       return NormalizePrice(dir == SIG_BUY ? entry - dist : entry + dist);
      }
 
-   double            CalcTP(const ENUM_SIGNAL_DIR dir, const double entry, const double sl, const double atr) const
+   double            CalcTP(const ENUM_SIGNAL_DIR dir, const double entry, const double sl, const double atr, const double signalTP) const
      {
+      if(signalTP > 0.0 && (dir == SIG_BUY ? signalTP > entry : signalTP < entry))
+         return NormalizePrice(signalTP);
       double dist = 0.0;
       if(m_cfg.tpMode == TP_ATR)
          dist = m_cfg.tpAtrMult * atr;
@@ -101,8 +109,8 @@ private:
       bool            isBuy = (sig.dir == SIG_BUY);
       ENUM_ORDER_TYPE type  = isBuy ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
       double entry = isBuy ? SymbolInfoDouble(m_symbol, SYMBOL_ASK) : SymbolInfoDouble(m_symbol, SYMBOL_BID);
-      double sl    = CalcSL(sig.dir, entry, sig.atr);
-      double tp    = CalcTP(sig.dir, entry, sl, sig.atr);
+      double sl    = CalcSL(sig.dir, entry, sig.atr, sig.sl);
+      double tp    = CalcTP(sig.dir, entry, sl, sig.atr, sig.tp);
       double lots  = m_risk.Calculate(type, entry, sl);
       if(lots <= 0.0)
         {
@@ -124,13 +132,15 @@ private:
      }
 
 public:
-                     CTradeManager(void) : m_symbol(""), m_risk(NULL) {}
+                     CTradeManager(void) : m_symbol(""), m_risk(NULL), m_guards(NULL) {}
 
-   bool              Init(const string symbol, const STradeSettings &cfg, CRiskManager *risk)
+   //--- guards is optional (NULL = no guards)
+   bool              Init(const string symbol, const STradeSettings &cfg, CRiskManager *risk, CGuardManager *guards = NULL)
      {
       m_symbol = symbol;
       m_cfg    = cfg;
       m_risk   = risk;
+      m_guards = guards;
       if(CheckPointer(m_risk) == POINTER_INVALID)
          return false;
       m_trade.SetExpertMagicNumber(m_cfg.magic);
@@ -184,6 +194,19 @@ public:
       return ok;
      }
 
+   //--- exit-only signal: close positions against 'sig' without opening a new one
+   void              OnExitSignal(const SSignal &sig)
+     {
+      if(!Enabled() || sig.dir == SIG_NONE || !m_cfg.closeOnOpposite)
+         return;
+      int against = (sig.dir == SIG_BUY) ? POSITION_TYPE_SELL : POSITION_TYPE_BUY;
+      if(CountPositions(against) > 0)
+        {
+         PrintFormat("TradeManager: filtered %s flip - closing opposite positions", SignalDirToString(sig.dir));
+         ClosePositions(against);
+        }
+     }
+
    void              OnSignal(const SSignal &sig)
      {
       if(!Enabled() || sig.dir == SIG_NONE)
@@ -201,6 +224,12 @@ public:
          return;
       if(CountPositions() >= m_cfg.maxPositions)
          return;
+      string reason;
+      if(CheckPointer(m_guards) != POINTER_INVALID && !m_guards.CanOpen(reason))
+        {
+         PrintFormat("TradeManager: %s signal not traded - %s", SignalDirToString(sig.dir), reason);
+         return;
+        }
       Open(sig);
      }
   };
