@@ -50,7 +50,7 @@ public:
                    "trades", "net_profit", "gross_profit", "gross_loss", "profit_factor", "win_pct",
                    "long_trades", "long_win_pct", "short_trades", "short_win_pct",
                    "max_dd_pct", "max_dd_money", "recovery", "sharpe", "expected_payoff",
-                   "initial_deposit", "criterion");
+                   "initial_deposit", "criterion", "max_loss", "max_loss_pct");
       FileSeek(h, 0, SEEK_END);
 
       double trades = TesterStatistics(STAT_TRADES);
@@ -72,7 +72,10 @@ public:
                 DoubleToString(TesterStatistics(STAT_SHARPE_RATIO), 3),
                 DoubleToString(TesterStatistics(STAT_EXPECTED_PAYOFF), 3),
                 DoubleToString(TesterStatistics(STAT_INITIAL_DEPOSIT), 2),
-                DoubleToString(criterion, 4));
+                DoubleToString(criterion, 4),
+                DoubleToString(TesterStatistics(STAT_MAX_LOSSTRADE), 2),
+                DoubleToString(TesterStatistics(STAT_INITIAL_DEPOSIT) > 0.0 ?
+                               MathAbs(TesterStatistics(STAT_MAX_LOSSTRADE)) / TesterStatistics(STAT_INITIAL_DEPOSIT) * 100.0 : 0.0, 3));
       FileClose(h);
      }
 

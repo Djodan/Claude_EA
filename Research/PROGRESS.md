@@ -203,7 +203,14 @@ long-only helps given gold's bias.
 
 ---
 
-## Round 6 – breakout timing (v2.13, M1)
+## Prop-firm constraints (user, 2026-09-22)
+Account $100k prop firm. Rules: **no hedging**, **no single trade loss > 1% of the account**.
+v2.14: risk 0.8% per trade (20% cushion for slippage/gaps), sized from min(balance, equity);
+no-hedge check (never open against any open position on the symbol); results.csv adds
+`max_loss_pct` (largest single loss / initial deposit) – must stay < 1.0 in every accepted setup.
+Note: $ results from here are at 0.8% risk (×0.8 vs earlier rounds); compare PF / DD / recovery.
+
+## Round 6 – breakout timing (v2.14, M1)
 v2.13: trade export adds 1R risk, MFE/MAE (price and R) and result in R per trade.
 Grid (54): last entry 14/17/20 · EOD close 20/23 · buffer 0/0.2/0.5 ATR · range start 01/03/05.
 Hypotheses: earlier range start (01) best – full Asian range; last entry 17 (before late NY chop).

@@ -65,7 +65,11 @@ public:
               }
             lossPerLot = MathAbs(lossPerLot);
             if(lossPerLot > 0.0)
-               lots = AccountInfoDouble(ACCOUNT_EQUITY) * m_cfg.riskPercent / 100.0 / lossPerLot;
+              {
+               // size from the lower of balance and equity (prop rules usually measure against balance)
+               double base = MathMin(AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY));
+               lots = base * m_cfg.riskPercent / 100.0 / lossPerLot;
+              }
            }
         }
 

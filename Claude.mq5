@@ -23,7 +23,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.13"
+#define EA_VERSION "2.14"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: DJ Trend, session breakout and trend pullback with shared news/session/spread guards."
@@ -68,7 +68,8 @@ input ulong              InpMagic         = 20260900;       // Base magic (strat
 input int                InpDeviation     = 50;             // Max slippage (points)
 input ENUM_LOT_MODE      InpLotMode       = LOT_RISK_PERCENT; // Lot mode
 input double             InpFixedLots     = 0.10;           // Fixed lots
-input double             InpRiskPercent   = 1.0;            // Risk % of equity per trade (needs SL)
+input double             InpRiskPercent   = 0.8;            // Risk % per trade (prop rule: max loss 1%)
+input bool               InpAllowHedge    = false;          // Allow opposite positions (prop: no hedging)
 
 input group "=== S1 Trend: DJ Trend flip ==="
 input bool               InpT_Enable      = true;           // Enable
@@ -237,6 +238,7 @@ void DefaultTrade(STradeSettings &t, const ENUM_EA_TRADE_MODE mode)
    t.magic           = InpMagic;
    t.deviation       = InpDeviation;
    t.comment         = "";
+   t.allowHedge      = InpAllowHedge;
   }
 
 void BuildConfig(SEAConfig &c)

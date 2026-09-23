@@ -25,6 +25,7 @@ struct STradeSettings
    ulong             magic;
    int               deviation;         // max slippage, points
    string            comment;
+   bool              allowHedge;        // false = never open against ANY open position on the symbol
   };
 
 class CTradeManager
@@ -173,6 +174,19 @@ public:
       return count;
      }
 
+   //--- any open position on the symbol (any EA, any magic) in the opposite direction?
+   bool              OppositeOnSymbol(const ENUM_SIGNAL_DIR dir) const
+     {
+      long against = (dir == SIG_BUY) ? POSITION_TYPE_SELL : POSITION_TYPE_BUY;
+      for(int i = PositionsTotal() - 1; i >= 0; i--)
+        {
+         ulong ticket = PositionGetTicket(i);
+         if(ticket != 0 && PositionGetString(POSITION_SYMBOL) == m_symbol && PositionGetInteger(POSITION_TYPE) == against)
+            return true;
+        }
+      return false;
+     }
+
    bool              ClosePositions(const int type = -1)
      {
       bool ok = true;
@@ -224,6 +238,11 @@ public:
          return;
       if(CountPositions() >= m_cfg.maxPositions)
          return;
+      if(!m_cfg.allowHedge && OppositeOnSymbol(sig.dir))
+        {
+         PrintFormat("TradeManager: %s skipped - opposite position open on %s (no hedging)", SignalDirToString(sig.dir), m_symbol);
+         return;
+        }
       string reason;
       if(CheckPointer(m_guards) != POINTER_INVALID && !m_guards.CanOpen(reason))
         {
