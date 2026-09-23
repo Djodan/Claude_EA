@@ -305,6 +305,26 @@ The edge is specific to the Asian range breaking into London.
 S2 only. Grid (20): S2 TF M1–M5 (chart stays M1) × last entry 14/17 × one-per-day on/off.
 Hypothesis: M1 enters earliest (best R), M2–M3 may filter 1-minute fakeouts; M5 too late.
 
+**Results (20 passes):** M1 best on every metric; monotonic decline with TF
+(entries till 17, 1/day: M1 PF 2.15 rec 10.8 · M2 1.94 / 8.7 · M3 1.92 / 8.4 · M4 1.90 / 7.7 · M5 1.75 / 6.5).
+Last entry 17 > 14 (rec), one-per-day > multi on every TF. Max loss 0.899% ✅.
+
+**Conclusions:** ✅ defaults confirmed – S2 is converged.
+
+### ⭐ Current best (v2.23 defaults, preset 2 = S2 only)
+XAUUSD M1 · Asian range 01:00–09:00 server · entries 09:00–17:00 on the first M1 close beyond
+range ± 0.25 ATR · one trade/day · stop = other side of range · TP 2R · flat 23:00 · news ±30 min
+(USD high, excl. crude) · spread ≤ 60 · risk 0.8% of min(balance, equity, $100k) · no hedging.
+2026.01.01–09.18: **140 trades, +27,062 (+27%), PF 2.15, win 59%, DD 2.44%, recovery 10.8,
+max loss 0.90%**, every month profitable.
+
+---
+
+## Validation – 2025 out-of-sample (v2.23)
+Single run, no optimisation, same defaults, 2025.01.01–2025.12.31. Calendar re-exported from
+2024.12.01 so the news guard covers the year.
+Pass criteria: PF > 1.4, max loss < 1%, no month worse than -3%, DD < 6%.
+
 **Results:** _pending_
 
 Next after R10: single un-optimised validation run on 2025 (out-of-sample) before going live.

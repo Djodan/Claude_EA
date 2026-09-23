@@ -24,7 +24,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.22"
+#define EA_VERSION "2.23"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -179,7 +179,7 @@ input int                InpNewsBefore    = 30;             // Minutes before ev
 input int                InpNewsAfter     = 30;             // Minutes after event
 input string             InpNewsExclude   = "Crude Oil";    // Ignore events containing (comma-separated)
 input bool               InpNewsExport    = true;           // Export calendar when run on a live chart
-input datetime           InpNewsFrom      = D'2025.06.01';  // Export from
+input datetime           InpNewsFrom      = D'2024.12.01';  // Export from
 
 input group "=== Guard: Session / Spread / Daily ==="
 input bool               InpUseSession    = false;          // Session filter (server time)
