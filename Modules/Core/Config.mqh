@@ -175,7 +175,7 @@ string BreakoutSummary(const string tag, const SBreakoutConfig &b)
    return StringFormat("%s[%s %02d:%02d-%02d:%02d<%02d buf%.2f%s%s%s%s] ", tag, TfName(b.s.tf),
                        b.brk.rangeStartHour, b.brk.rangeStartMin, b.brk.rangeEndHour, b.brk.rangeEndMin,
                        b.brk.tradeEndHour, b.brk.bufferAtr, d1, b.brk.stopMode == BRK_STOP_MID ? " MID" : "",
-                       (b.brk.oneTradePerDay ? " 1/day" : " multi") + (b.alignAsian ? " ALIGN" : "") +
+                       (b.brk.oneTradePerDay ? " 1/day" : " multi") + (b.brk.bodyRange ? " BODY" : "") + (b.alignAsian ? " ALIGN" : "") +
                        (b.trendLen > 0 ? StringFormat(" TR%s/%s%d", TfName(b.trendTF), StringSubstr(EnumToString(b.trendType), 6), b.trendLen) : ""),
                        ExitSummary(b.s));
   }

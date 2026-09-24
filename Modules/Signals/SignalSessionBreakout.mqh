@@ -36,6 +36,7 @@ struct SBreakoutSettings
    int               atrLen;
    ENUM_BRK_STOP     stopMode;
    bool              oneTradePerDay;    // only the first breakout of the day, either side
+   bool              bodyRange;         // range from candle bodies (open/close) - ignores wick spikes
    int               lookback;
   };
 
@@ -90,8 +91,16 @@ private:
          int m = MinuteOfDay(m_rates[j].time);
          if(m >= RangeStart() && m < RangeEnd())
            {
-            hi = MathMax(hi, m_rates[j].high);
-            lo = MathMin(lo, m_rates[j].low);
+            if(m_cfg.bodyRange)
+              {
+               hi = MathMax(hi, MathMax(m_rates[j].open, m_rates[j].close));
+               lo = MathMin(lo, MathMin(m_rates[j].open, m_rates[j].close));
+              }
+            else
+              {
+               hi = MathMax(hi, m_rates[j].high);
+               lo = MathMin(lo, m_rates[j].low);
+              }
             count++;
            }
         }
@@ -166,6 +175,7 @@ public:
       m_cfg.atrLen         = 14;
       m_cfg.stopMode       = BRK_STOP_RANGE;
       m_cfg.oneTradePerDay = true;
+      m_cfg.bodyRange      = false;
       m_cfg.lookback       = 400;
      }
 

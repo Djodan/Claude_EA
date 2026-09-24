@@ -491,7 +491,16 @@ guard at 60.00 = off; UK at 0.60) and wider Asian ranges on the UK broker (media
 TP 2R further away; likely spread spikes right after the 01:00 open). Sep 7 (US Labor Day) held
 overnight: early holiday close is not in the broker's session schedule.
 
-## Round 13 – range start minute + spread limit (v2.35), run on BOTH brokers
-Grid (21): range start 01:00–01:30 (5 min) × max spread off / 0.60 / 1.20.
+### VPS vs local Alpari (v2.35, identical settings, TZ_NY_CLOSE, spread 0.60)
+Local Alpari (data "Alpari", 100% real ticks): 138 tr, +24,983, PF 2.06, DD 2.48%, max loss 0.90%.
+VPS (data "MetaQuotes Ltd.", 99% real ticks): 132 tr, +15,832, PF 1.67, DD 3.33%, max loss 0.85%.
+128 same day+dir, 0 opposite, entry minute identical → EA logic identical; the gap is the price
+feed: VPS Asian ranges wider (median 59.1 vs 54.3; e.g. 09-14 51.5 vs 33.9, 07-23 54.4 vs 30.4)
+→ later breakouts, wider stops, TP 2R out of reach. 10 Alpari-only days.
+Live trades fill on the prop firm's feed regardless of terminal → test on the prop firm's data.
+
+## Round 13 – range robustness to price feeds (v2.36), run on BOTH feeds
+New `InpB_BodyRange`: Asian range from candle bodies (open/close) instead of wicks.
+Grid (18): range start 01:00 / 01:15 / 01:30 × body range off/on × max spread off / 0.60 / 1.20.
 Hypothesis: starting the range 5–15 min after the open skips opening spread spikes → ranges
 converge between brokers; spread limit 0.60 may skip good breakouts on wider-spread brokers.

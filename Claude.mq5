@@ -26,7 +26,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.35"
+#define EA_VERSION "2.36"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -131,6 +131,7 @@ input double             InpB_MaxRangeD1  = 0.0;            // Max range width (
 input int                InpB_AtrLen      = 14;             // ATR length
 input ENUM_BRK_STOP      InpB_StopMode    = BRK_STOP_RANGE; // Stop placement
 input bool               InpB_OnePerDay   = true;           // One breakout per day
+input bool               InpB_BodyRange   = false;          // Range from candle bodies (ignore wick spikes)
 input double             InpB_SLAtr       = 3.0;            // Fallback SL (ATR x)
 input ENUM_TP_MODE       InpB_TPMode      = TP_RR;          // Take profit mode
 input double             InpB_TPRR        = 2.0;            // TP risk:reward
@@ -374,6 +375,7 @@ void BuildConfig(SEAConfig &c)
    c.brk.brk.atrLen         = InpB_AtrLen;
    c.brk.brk.stopMode       = InpB_StopMode;
    c.brk.brk.oneTradePerDay = InpB_OnePerDay;
+   c.brk.brk.bodyRange      = InpB_BodyRange;
    c.brk.brk.lookback       = 400;
    c.brk.alignAsian         = false;
    c.brk.trendLen           = InpB_TrendLen;
