@@ -108,9 +108,10 @@ private:
      }
 
    //--- breakout on bar i? sets the suggested stop
-   ENUM_SIGNAL_DIR   Evaluate(const int i, double &sl) const
+   ENUM_SIGNAL_DIR   Evaluate(const int i, double &sl, double &level) const
      {
-      sl = 0.0;
+      sl    = 0.0;
+      level = 0.0;
       if(i < 1 || i >= m_n)
          return SIG_NONE;
       int m = MinuteOfDay(m_rates[i].time);
@@ -155,6 +156,7 @@ private:
          sl = (hi + lo) / 2.0;
       else
          sl = (dir == SIG_BUY) ? lo : hi;
+      level = (dir == SIG_BUY) ? up : dn;
       return dir;
      }
 
@@ -203,10 +205,13 @@ public:
       CPineTA::ATR(m_high, m_low, m_close, m_n, m_cfg.atrLen, m_atr);
       UpdateDailyAtr();
 
-      double sl;
-      ENUM_SIGNAL_DIR dir = Evaluate(m_n - 1, sl);
+      double sl, level;
+      ENUM_SIGNAL_DIR dir = Evaluate(m_n - 1, sl, level);
       FillSignal(m_n - 1, dir, m_atr[m_n - 1], m_last);
-      m_last.sl = sl;
+      m_last.sl    = sl;
+      m_last.level = level;
+      if(dir != SIG_NONE)               // no entries after the trade window (server time of today's window end)
+         m_last.expiry = m_rates[m_n - 1].time + (TradeEnd() - MinuteOfDay(m_rates[m_n - 1].time)) * 60;
 
       double hi, lo;
       if(RangeFor(m_n - 1, hi, lo) && MinuteOfDay(m_rates[m_n - 1].time) >= RangeEnd())
@@ -233,8 +238,8 @@ public:
       int count = 0;
       for(int i = 1; i < m_n; i++)
         {
-         double sl;
-         ENUM_SIGNAL_DIR dir = Evaluate(i, sl);
+         double sl, level;
+         ENUM_SIGNAL_DIR dir = Evaluate(i, sl, level);
          if(dir == SIG_NONE)
             continue;
          ArrayResize(out, count + 1, 64);

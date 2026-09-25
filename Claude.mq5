@@ -26,7 +26,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.36"
+#define EA_VERSION "2.37"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
@@ -148,6 +148,8 @@ input int                InpB_TrendLen    = 50;             // Trend filter: MA 
 input ENUM_TIMEFRAMES    InpB_TrendTF     = PERIOD_D1;      // Trend filter: timeframe
 input ENUM_BASIS_TYPE    InpB_TrendType   = BASIS_EMA;      // Trend filter: MA type
 input int                InpB_NewsExit    = 5;              // Exit: close N min before high-impact news (0 = off)
+input bool               InpB_RetryBlocked= false;          // Retry a breakout blocked by news/spread once the block ends
+input int                InpB_RetryMins   = 240;            // Retry for at most N minutes (and never after last entry hour)
 
 input group "=== S4 NY opening-range breakout ==="
 input bool               InpN_Enable      = false;          // Enable (R8/R9: no edge)
@@ -287,6 +289,8 @@ void BuildConfig(SEAConfig &c)
    c.trend.s.tf                 = InpT_TF;
    c.trend.s.atrLen             = InpT_AtrLen;
    c.trend.s.exitOnFilteredFlip = InpT_ExitOnFlip;
+   c.trend.s.retryBlocked = false;
+   c.trend.s.retryMins = 0;
    DefaultTrade(c.trend.s.trade, InpT_Mode);
    c.trend.s.trade.closeOnOpposite = InpT_CloseOpp;
    c.trend.s.trade.slMode       = InpT_SLMode;
@@ -382,6 +386,8 @@ void BuildConfig(SEAConfig &c)
    c.brk.trendTF            = InpB_TrendTF;
    c.brk.trendType          = InpB_TrendType;
    c.brk.s.exits.newsExitMins = InpB_NewsExit;
+   c.brk.s.retryBlocked       = InpB_RetryBlocked;
+   c.brk.s.retryMins          = InpB_RetryMins;
    c.brk.brk.minRangeD1     = InpB_MinRangeD1;
    c.brk.brk.maxRangeD1     = InpB_MaxRangeD1;
 
@@ -408,6 +414,7 @@ void BuildConfig(SEAConfig &c)
    c.ny.brk.stopMode       = InpN_StopMode;
    c.ny.brk.oneTradePerDay = true;
    c.ny.alignAsian         = InpN_AlignAsian;
+   c.ny.s.retryBlocked     = false;
    c.ny.trendLen           = 0;
 
    //--- S3 Pullback
@@ -415,6 +422,8 @@ void BuildConfig(SEAConfig &c)
    c.pb.s.tf                 = InpP_TF;
    c.pb.s.atrLen             = InpP_AtrLen;
    c.pb.s.exitOnFilteredFlip = false;
+   c.pb.s.retryBlocked = false;
+   c.pb.s.retryMins = 0;
    DefaultTrade(c.pb.s.trade, InpP_Mode);
    c.pb.s.trade.closeOnOpposite = true;
    c.pb.s.trade.slMode       = SL_ATR;
@@ -515,6 +524,7 @@ bool StartStrategy(CStrategy *st, const int id, const SStrategyCommon &s)
   {
    ENUM_TIMEFRAMES tf = (s.tf == PERIOD_CURRENT) ? (ENUM_TIMEFRAMES)_Period : s.tf;
    AddExits(st, s.exits);
+   st.Retry(s.retryBlocked, s.retryMins);
    if(!st.Init(g_symbol, tf, InpMagic + id, s.trade, g_cfg.risk, s.atrLen, s.exitOnFilteredFlip, GetPointer(g_guards)))
      {
       PrintFormat("Strategy %s failed to initialise", st.Name());

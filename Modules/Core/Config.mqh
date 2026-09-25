@@ -52,6 +52,8 @@ struct SStrategyCommon
    ENUM_TIMEFRAMES   tf;
    int               atrLen;               // ATR for SL/TP and position management
    bool              exitOnFilteredFlip;
+   bool              retryBlocked;         // retry signals a guard blocked (news/spread) while still valid
+   int               retryMins;
    STradeSettings    trade;
    SExitSettings     exits;
   };
@@ -151,6 +153,8 @@ string ExitSummary(const SStrategyCommon &s)
       r += " SHORT";
    if(s.exitOnFilteredFlip)
       r += " XF";
+   if(s.retryBlocked)
+      r += StringFormat(" RETRY%d", s.retryMins);
    string u = s.exits.unitR ? "R" : "A";
    if(s.exits.usePartial)
       r += StringFormat(" PART%.0f%%@%.2f%s", s.exits.partialPct, s.exits.partialAtr, u);

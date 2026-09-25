@@ -75,6 +75,8 @@ struct SSignal
    double            atr;         // volatility at the signal bar (for SL/TP/labels)
    double            sl;          // suggested stop price from the module (0 = none)
    double            tp;          // suggested target price from the module (0 = none)
+   double            level;       // price the signal is based on (e.g. breakout level; 0 = none)
+   datetime          expiry;      // last time the signal may still be acted on (0 = none)
    string            source;      // module name
 
    void              Reset(void)
@@ -88,6 +90,8 @@ struct SSignal
       atr       = 0.0;
       sl        = 0.0;
       tp        = 0.0;
+      level     = 0.0;
+      expiry    = 0;
       source    = "";
      }
   };

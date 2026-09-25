@@ -504,3 +504,16 @@ New `InpB_BodyRange`: Asian range from candle bodies (open/close) instead of wic
 Grid (18): range start 01:00 / 01:15 / 01:30 × body range off/on × max spread off / 0.60 / 1.20.
 Hypothesis: starting the range 5–15 min after the open skips opening spread spikes → ranges
 converge between brokers; spread limit 0.60 may skip good breakouts on wider-spread brokers.
+
+## v2.37 – retry breakouts blocked by a guard (user request)
+Seen live: 2026-09-02 BUY breakout at 15:21 blocked by the news guard (ADP 15:15 server, ±30 min);
+with one-trade-per-day the day's signal was then used up although price stayed above the range.
+New `InpB_RetryBlocked` / `InpB_RetryMins`: a guard-blocked signal (news, spread) is kept pending and
+entered on the first new bar after the block ends if the close is still beyond the breakout level,
+within N minutes and before the last-entry hour; dropped if price closes back through the stop side.
+Stop stays at the range side; size is recalculated (risk unchanged). Dashboard shows the pending signal.
+
+## Round 14 – retry after block (v2.37), run on 2026 AND 2025
+Grid (16): retry off/on × retry window 60/120/180/240 min × trend filter off / D1 EMA 50 (news exit 5 on).
+Hypothesis: retry adds a handful of trades per month at ≥ baseline PF; entries are later (worse price)
+but the move that survived the news is often the real one.

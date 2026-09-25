@@ -10,6 +10,10 @@
 #include "RiskManager.mqh"
 #include "../Guards/GuardManager.mqh"
 
+#define SIGNAL_OPENED   1
+#define SIGNAL_SKIPPED  0
+#define SIGNAL_BLOCKED -1
+
 struct STradeSettings
   {
    ENUM_EA_TRADE_MODE mode;
@@ -232,35 +236,36 @@ public:
         }
      }
 
-   void              OnSignal(const SSignal &sig)
+   //--- returns SIGNAL_OPENED, SIGNAL_SKIPPED, or SIGNAL_BLOCKED (a guard said "not now" - may retry)
+   int               OnSignal(const SSignal &sig)
      {
       if(!Enabled() || sig.dir == SIG_NONE)
-         return;
+         return SIGNAL_SKIPPED;
       if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED))
         {
          Issue("algo trading disabled - " + SignalDirToString(sig.dir) + " signal not traded");
-         return;
+         return SIGNAL_SKIPPED;
         }
 
       if(m_cfg.closeOnOpposite)
          ClosePositions(sig.dir == SIG_BUY ? POSITION_TYPE_SELL : POSITION_TYPE_BUY);
 
       if(!DirectionAllowed(sig.dir))
-         return;
+         return SIGNAL_SKIPPED;
       if(CountPositions() >= m_cfg.maxPositions)
-         return;
+         return SIGNAL_SKIPPED;
       if(!m_cfg.allowHedge && OppositeOnSymbol(sig.dir))
         {
          PrintFormat("TradeManager: %s skipped - opposite position open on %s (no hedging)", SignalDirToString(sig.dir), m_symbol);
-         return;
+         return SIGNAL_SKIPPED;
         }
       string reason;
       if(CheckPointer(m_guards) != POINTER_INVALID && !m_guards.CanOpen(reason))
         {
          PrintFormat("TradeManager: %s signal not traded - %s", SignalDirToString(sig.dir), reason);
-         return;
+         return SIGNAL_BLOCKED;
         }
-      Open(sig);
+      return Open(sig) ? SIGNAL_OPENED : SIGNAL_SKIPPED;
      }
   };
 
