@@ -131,6 +131,7 @@ struct SScalpFilters
    double            maxAdx;                               // 0 = off
    ENUM_TIMEFRAMES   trendTF;                              // momentum: trend direction
    int               trendLen;                             // 0 = off
+   bool              alignAsian;                           // only trade the direction price broke the Asian range
   };
 
 struct SMeanRevConfig
@@ -273,8 +274,9 @@ string ConfigSummary(const SEAConfig &c)
    if(c.ny.s.enabled)
       s += BreakoutSummary("N", c.ny);
    if(c.mr.s.enabled || c.mo.s.enabled)
-      s += StringFormat("S[%02d:%02d-%02d:%02d+%02d:%02d-%02d:%02d] ", c.scalp.w1StartH, c.scalp.w1StartM, c.scalp.w1EndH,
-                        c.scalp.w1EndM, c.scalp.w2StartH, c.scalp.w2StartM, c.scalp.w2EndH, c.scalp.w2EndM);
+      s += StringFormat("S[%02d:%02d-%02d:%02d+%02d:%02d-%02d:%02d%s] ", c.scalp.w1StartH, c.scalp.w1StartM, c.scalp.w1EndH,
+                        c.scalp.w1EndM, c.scalp.w2StartH, c.scalp.w2StartM, c.scalp.w2EndH, c.scalp.w2EndM,
+                        c.scalp.alignAsian ? " ALIGN" : "");
    if(c.mr.s.enabled)
       s += StringFormat("MR[%s BB%d/%.1f RSI%d %.0f/%.0f adx<%.0f%s] ", TfName(c.mr.s.tf), c.mr.mr.bbLen, c.mr.mr.bbDev,
                         c.mr.mr.rsiLen, c.mr.mr.rsiLow, c.mr.mr.rsiHigh, c.scalp.maxAdx, ExitSummary(c.mr.s));

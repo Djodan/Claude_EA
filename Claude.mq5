@@ -30,7 +30,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.00"
+#define EA_VERSION "4.10"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -212,11 +212,12 @@ input double             InpS_RiskPct     = 0.25;           // Risk % per scalp
 input int                InpS_MaxPerDay   = 10;             // Max scalps per day per engine (0 = no limit)
 input int                InpS_CooldownBars= 2;              // Bars to wait after an exit
 input int                InpS_MaxBars     = 30;             // Time exit: close after N bars (0 = off)
-input bool               InpS_UseBE       = true;           // Breakeven
+input bool               InpS_UseBE       = false;          // Breakeven (R17: scratched winners)
 input double             InpS_BETrigger   = 0.6;            // Breakeven trigger (R)
 input int                InpS_EODHour     = 21;             // Close all scalps at (ref hour)
 input int                InpS_NewsExit    = 5;              // Close N min before high-impact news (0 = off)
 input int                InpS_AtrLen      = 14;             // ATR length
+input bool               InpS_AlignAsian  = true;           // Only scalp in the direction price broke the Asian range
 input bool               InpM_Enable      = false;          // S7 mean reversion: enable (presets 12/14/15)
 input int                InpM_BBLen       = 20;             // S7 Bollinger length
 input double             InpM_BBDev       = 2.0;            // S7 Bollinger deviation
@@ -604,6 +605,7 @@ void BuildConfig(SEAConfig &c)
    c.scalp.maxAdx   = InpM_MaxAdx;
    c.scalp.trendTF  = InpK_TrendTF;
    c.scalp.trendLen = InpK_TrendLen;
+   c.scalp.alignAsian = InpS_AlignAsian;
 
    SStrategyCommon sc = ic;
    sc.tf                  = InpS_TF;
@@ -838,6 +840,17 @@ void AddIntradayFilters(CStrategy *st)
 //--- scalper session windows (London + New York by default)
 void AddScalpWindow(CStrategy *st)
   {
+   if(g_cfg.scalp.alignAsian)
+     {
+      // daily bias from the proven Asian-range breakout: price must be beyond today's range on the trade side
+      CSignalSessionBreakout *asian = new CSignalSessionBreakout();
+      SBreakoutSettings a = g_cfg.brk.brk;
+      a.tradeEndHour = 23;
+      a.tradeEndMin  = 59;
+      asian.Configure(a);
+      asian.Name("AsianBias");
+      st.AddSignal(asian, ROLE_FILTER);
+     }
    CFilterTimeWindow *w = new CFilterTimeWindow();
    w.Configure(g_cfg.scalp.w1StartH, g_cfg.scalp.w1StartM, g_cfg.scalp.w1EndH, g_cfg.scalp.w1EndM);
    w.Configure2(g_cfg.scalp.w2StartH, g_cfg.scalp.w2StartM, g_cfg.scalp.w2EndH, g_cfg.scalp.w2EndM);

@@ -590,3 +590,23 @@ Different behaviour from everything tested before:
 ## Round 17 – scalper screening (v4.00)
 Grid (15): preset 12 mean reversion / 13 momentum / 14 both × scalper TF M1–M5. TC_CONSISTENCY.
 Then a single run of the best to get the trade list (hours, R distribution) for fine tuning.
+
+**Round 17 results (15 passes, 2026):** ❌ every scalper setup lost except MR M3 (+837, PF 1.03).
+MR PF 0.85–1.04, MO PF 0.79–0.97, both together up to -37.9k on M1 (14.6 trades/day).
+Trade-list diagnosis (preset 14, M1, 2,725 trades):
+- MR: win 52%, avg win +0.69R / loss -0.85R → -0.05R/trade; median 1R $3.76.
+- MO: win 48%, avg win +0.75R / loss -0.87R → -0.08R/trade; median 1R $2.31.
+- Spread + slippage ≈ $0.25–0.35 round trip = 0.1–0.15R per scalp ≈ the whole loss → the signals
+  are ~breakeven before costs (no edge). BE at 0.6R scratched many trades (55% reach +0.6R).
+- No hour or direction is consistently positive.
+Conclusion: generic M1–M5 scalping signals do not beat gold's costs; scalps need a real
+directional edge behind them.
+
+## v4.10 – scalps aligned with the Asian-breakout daily bias
+`InpS_AlignAsian` (default on): the scalpers only trade in the direction price has broken today's
+Asian range (reuses the Asian-range module as a filter) – many trades/day, all on the side of the
+one proven edge (S2 PF ≈ 2.06). BE default off.
+
+## Round 18 (36 passes)
+preset 12 MR / 13 MO / 14 both × align off/on × BE off/on × TF M1 / M3 / M5. TC_CONSISTENCY.
+Hypothesis: alignment turns the ~0R scalps positive (the S2 edge is the direction of the day).
