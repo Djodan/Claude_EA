@@ -637,3 +637,13 @@ Frequency trade-off: best in 500–800 trades PF 1.27 / DD 5.1%; 800–1200 PF 1
 1200+ PF 1.10 / DD 8.5%.
 ⚠️ 0.5R targets on M5 are where 1-min OHLC is most optimistic → verify with real ticks.
 Candidates: R19_A_best (270 tr), R19_B_more (316 tr), R19_C_freq600 (612 tr), R19_D_freq800 (827 tr).
+
+## Round 20 – "Everything" genetic search (VPS, long run)
+Set: `Claude_Round20_Everything.set` – **119 optimised inputs**, preset 0 (custom) with every strategy
+enable (S1–S8) as an on/off gene, so any strategy combination is possible. Ranges cover all strategy
+parameters, signal/filter timeframes, sessions (both scalp windows), EOD hours, BE/partial/trail/time
+exits, trend filters, news guard on/off + minutes, spread limit, cooldown, max per day, and sizing
+(each risk input 0.1–0.8%, prop-safe). Fixed: TZ_NY_CLOSE, no hedging, account cap 100k, daily
+guard off (caps come later). Criterion TC_PROFIT_DD_PCT, min 30 trades.
+Run: genetic, 1-min OHLC, 2026.01.01–2026.09.21, XAUUSD M1, $100k. Genetic = guided sample, not
+exhaustive – rerun 2–3× (results differ per run) and compare the top clusters.
