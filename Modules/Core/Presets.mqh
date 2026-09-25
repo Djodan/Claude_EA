@@ -12,17 +12,21 @@
 
 #include "Config.mqh"
 
-//--- Round 4 (M1/M2): screen strategy combinations; guards come from the inputs
+//--- 1-7: original S1-S3 combinations (round 4) · 8-11: intraday strategies (round 15)
 enum ENUM_EA_PRESET
   {
    PRESET_CUSTOM   = 0,  // 0 Custom (use inputs)
    PRESET_TREND    = 1,  // 1 S1 Trend
-   PRESET_BREAKOUT = 2,  // 2 S2 Breakout
+   PRESET_BREAKOUT = 2,  // 2 S2 Asian Breakout (best_2026)
    PRESET_PULLBACK = 3,  // 3 S3 Pullback
    PRESET_T_B      = 4,  // 4 Trend + Breakout
    PRESET_T_P      = 5,  // 5 Trend + Pullback
    PRESET_B_P      = 6,  // 6 Breakout + Pullback
-   PRESET_ALL      = 7   // 7 All strategies
+   PRESET_ALL      = 7,  // 7 S1 + S2 + S3
+   PRESET_VWAP     = 8,  // 8 S5 VWAP trend pullback (intraday)
+   PRESET_PBO      = 9,  // 9 S6 Pullback-window breakout (intraday)
+   PRESET_VWAP_PBO = 10, // 10 S5 + S6 (intraday)
+   PRESET_INTRA_BRK= 11  // 11 S5 + S6 + S2 Asian breakout
   };
 
 void ApplyPreset(const ENUM_EA_PRESET preset, SEAConfig &c)
@@ -30,8 +34,11 @@ void ApplyPreset(const ENUM_EA_PRESET preset, SEAConfig &c)
    if(preset == PRESET_CUSTOM)
       return;
    c.trend.s.enabled = (preset == PRESET_TREND || preset == PRESET_T_B || preset == PRESET_T_P || preset == PRESET_ALL);
-   c.brk.s.enabled   = (preset == PRESET_BREAKOUT || preset == PRESET_T_B || preset == PRESET_B_P || preset == PRESET_ALL);
+   c.brk.s.enabled   = (preset == PRESET_BREAKOUT || preset == PRESET_T_B || preset == PRESET_B_P || preset == PRESET_ALL ||
+                        preset == PRESET_INTRA_BRK);
    c.pb.s.enabled    = (preset == PRESET_PULLBACK || preset == PRESET_T_P || preset == PRESET_B_P || preset == PRESET_ALL);
+   c.vw.s.enabled    = (preset == PRESET_VWAP || preset == PRESET_VWAP_PBO || preset == PRESET_INTRA_BRK);
+   c.pbo.s.enabled   = (preset == PRESET_PBO || preset == PRESET_VWAP_PBO || preset == PRESET_INTRA_BRK);
   }
 
 #endif

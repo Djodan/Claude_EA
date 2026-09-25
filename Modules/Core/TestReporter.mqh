@@ -14,6 +14,7 @@
 
 #include "TesterCriterion.mqh"
 #include "ExcursionTracker.mqh"
+#include "DailyStats.mqh"
 
 class CTestReporter
   {
@@ -76,6 +77,31 @@ public:
                 DoubleToString(TesterStatistics(STAT_MAX_LOSSTRADE), 2),
                 DoubleToString(TesterStatistics(STAT_INITIAL_DEPOSIT) > 0.0 ?
                                MathAbs(TesterStatistics(STAT_MAX_LOSSTRADE)) / TesterStatistics(STAT_INITIAL_DEPOSIT) * 100.0 : 0.0, 3));
+      FileClose(h);
+     }
+
+   //--- one row per pass: prop-firm consistency view (per reference day)
+   static void       WriteConsistency(const string symbol, const ENUM_TIMEFRAMES tf, const datetime from, const datetime to,
+                                      const int preset, const string build, const string config, const SDailyStats &d)
+     {
+      FolderCreate("ClaudeEA", FILE_COMMON);
+      string name = "ClaudeEA\\consistency.csv";
+      int h = FileOpen(name, FILE_READ | FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ | FILE_SHARE_WRITE, ',');
+      if(h == INVALID_HANDLE)
+         return;
+      if(FileSize(h) == 0)
+         FileWrite(h, "run_time", "build", "symbol", "tf", "from", "to", "preset", "config", "trades", "net_profit",
+                   "profit_factor", "max_dd_pct", "max_loss_pct", "days", "win_days_pct", "trades_per_day", "avg_day",
+                   "best_day", "worst_day", "best_day_share_pct");
+      FileSeek(h, 0, SEEK_END);
+      double dep = TesterStatistics(STAT_INITIAL_DEPOSIT);
+      FileWrite(h, TimeToString(TimeLocal(), TIME_DATE | TIME_SECONDS), build, symbol, StringSubstr(EnumToString(tf), 7),
+                TimeToString(from, TIME_DATE), TimeToString(to, TIME_DATE), preset, config, d.trades,
+                DoubleToString(d.total, 2), DoubleToString(CTesterCriterion::ProfitFactor(), 3),
+                DoubleToString(TesterStatistics(STAT_EQUITY_DDREL_PERCENT), 2),
+                DoubleToString(dep > 0.0 ? MathAbs(TesterStatistics(STAT_MAX_LOSSTRADE)) / dep * 100.0 : 0.0, 3),
+                d.days, DoubleToString(d.days > 0 ? 100.0 * d.winDays / d.days : 0.0, 1), DoubleToString(d.tradesPerDay, 2),
+                DoubleToString(d.avg, 2), DoubleToString(d.best, 2), DoubleToString(d.worst, 2), DoubleToString(d.bestShare, 1));
       FileClose(h);
      }
 

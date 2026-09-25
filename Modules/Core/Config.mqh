@@ -11,10 +11,13 @@
 #include "../Signals/SignalDJTrend.mqh"
 #include "../Signals/SignalSessionBreakout.mqh"
 #include "../Signals/SignalTrendPullback.mqh"
+#include "../Signals/SignalVWAPTrend.mqh"
+#include "../Signals/SignalPullbackBO.mqh"
 #include "../Signals/Filters/FilterADX.mqh"
 #include "../Signals/Filters/FilterVolatility.mqh"
 #include "../Signals/Filters/FilterSlope.mqh"
 #include "../Signals/Filters/FilterTrendMA.mqh"
+#include "../Signals/Filters/FilterTimeWindow.mqh"
 #include "../Guards/GuardSession.mqh"
 #include "../Guards/GuardDailyLimits.mqh"
 #include "../Guards/GuardNews.mqh"
@@ -54,6 +57,7 @@ struct SStrategyCommon
    bool              exitOnFilteredFlip;
    bool              retryBlocked;         // retry signals a guard blocked (news/spread) while still valid
    int               retryMins;
+   double            riskPct;              // per-strategy risk % (0 = use the global setting)
    STradeSettings    trade;
    SExitSettings     exits;
   };
@@ -91,8 +95,36 @@ struct SPullbackConfig
    SPullbackSettings pb;
   };
 
+//--- shared settings of the intraday strategies (S5, S6)
+struct SIntradayFilters
+  {
+   int               startHour;            // trading window, reference time
+   int               startMin;
+   int               endHour;
+   int               endMin;
+   ENUM_TIMEFRAMES   trendTF;              // higher-TF trend filter
+   int               trendLen;             // EMA length (0 = off)
+  };
+
+//--- S5: VWAP trend pullback
+struct SVWAPConfig
+  {
+   SStrategyCommon   s;
+   SVWAPSettings     vw;
+  };
+
+//--- S6: pullback-window breakout
+struct SPBOConfig
+  {
+   SStrategyCommon   s;
+   SPBOSettings      pbo;
+  };
+
 struct SEAConfig
   {
+   SVWAPConfig       vw;
+   SPBOConfig        pbo;
+   SIntradayFilters  intra;
    STrendConfig      trend;
    SBreakoutConfig   brk;
    SBreakoutConfig   ny;                   // S4: NY opening-range breakout
@@ -155,6 +187,12 @@ string ExitSummary(const SStrategyCommon &s)
       r += " XF";
    if(s.retryBlocked)
       r += StringFormat(" RETRY%d", s.retryMins);
+   if(s.riskPct > 0.0)
+      r += StringFormat(" risk%.2f", s.riskPct);
+   if(s.trade.maxPerDay > 0)
+      r += StringFormat(" max%d/d", s.trade.maxPerDay);
+   if(s.trade.cooldownSec > 0)
+      r += StringFormat(" cd%dm", s.trade.cooldownSec / 60);
    string u = s.exits.unitR ? "R" : "A";
    if(s.exits.usePartial)
       r += StringFormat(" PART%.0f%%@%.2f%s", s.exits.partialPct, s.exits.partialAtr, u);
@@ -206,6 +244,15 @@ string ConfigSummary(const SEAConfig &c)
       s += BreakoutSummary("B", c.brk);
    if(c.ny.s.enabled)
       s += BreakoutSummary("N", c.ny);
+   if(c.vw.s.enabled || c.pbo.s.enabled)
+      s += StringFormat("I[%02d:%02d-%02d:%02d%s] ", c.intra.startHour, c.intra.startMin, c.intra.endHour, c.intra.endMin,
+                        c.intra.trendLen > 0 ? StringFormat(" TR%s/%d", TfName(c.intra.trendTF), c.intra.trendLen) : "");
+   if(c.vw.s.enabled)
+      s += StringFormat("V[%s touch%.2f buf%.2f sl%.1f-%.1f%s] ", TfName(c.vw.s.tf), c.vw.vw.touchAtr, c.vw.vw.slBufAtr,
+                        c.vw.vw.minSlAtr, c.vw.vw.maxSlAtr, ExitSummary(c.vw.s));
+   if(c.pbo.s.enabled)
+      s += StringFormat("X[%s %d/%d pull%d sl%.1f-%.1f%s] ", TfName(c.pbo.s.tf), c.pbo.pbo.fastLen, c.pbo.pbo.slowLen,
+                        c.pbo.pbo.maxPull, c.pbo.pbo.minSlAtr, c.pbo.pbo.maxSlAtr, ExitSummary(c.pbo.s));
    if(c.pb.s.enabled)
       s += StringFormat("P[%s %d/%d RSI%d %.0f/%.0f%s] ", TfName(c.pb.s.tf), c.pb.pb.fastLen, c.pb.pb.slowLen,
                         c.pb.pb.rsiLen, c.pb.pb.rsiLow, c.pb.pb.rsiHigh, ExitSummary(c.pb.s));
@@ -218,7 +265,7 @@ string ConfigSummary(const SEAConfig &c)
    if(c.useSession)
       s += " SESS";
    if(c.useDaily)
-      s += " DAILY";
+      s += StringFormat(" DAILY+%.0f/-%.0f", c.daily.profitTargetMoney, c.daily.maxLossMoney);
    if(c.maxSpread > 0.0)
       s += StringFormat(" SPR%.2f", c.maxSpread);
    return s;

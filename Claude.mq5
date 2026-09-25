@@ -11,6 +11,8 @@
 //|    S2 Breakout  - session range breakout (Asian -> London/NY)    |
 //|    S3 Pullback  - EMA trend + RSI dip entries                    |
 //|    S4 BreakoutNY - NY opening-range breakout (same module as S2)  |
+//|    S5 VWAPTrend  - intraday VWAP trend pullback                  |
+//|    S6 PullbackBO - intraday pullback-window breakout              |
 //|                                                                  |
 //|  Modules live in ./Modules:                                      |
 //|    Core/     types, config, presets, new bar, tester reporting   |
@@ -26,10 +28,10 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "2.40"
+#define EA_VERSION "3.00"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
-#property description "XAUUSD M1/M2 portfolio: Asian-range and NY opening-range breakouts (plus trend/pullback) with prop-firm risk guards."
+#property description "XAUUSD portfolio: Asian-range breakout (best_2026) + intraday VWAP-trend and pullback-breakout scalping, prop-firm guards."
 
 #include "Modules/Core/Defines.mqh"
 #include "Modules/Core/TimeZone.mqh"
@@ -39,14 +41,18 @@
 #include "Modules/Core/TestReporter.mqh"
 #include "Modules/Core/CalendarExport.mqh"
 #include "Modules/Core/ExcursionTracker.mqh"
+#include "Modules/Core/DailyStats.mqh"
 #include "Modules/Strategy/Strategy.mqh"
 #include "Modules/Signals/SignalDJTrend.mqh"
 #include "Modules/Signals/SignalSessionBreakout.mqh"
 #include "Modules/Signals/SignalTrendPullback.mqh"
+#include "Modules/Signals/SignalVWAPTrend.mqh"
+#include "Modules/Signals/SignalPullbackBO.mqh"
 #include "Modules/Signals/Filters/FilterADX.mqh"
 #include "Modules/Signals/Filters/FilterVolatility.mqh"
 #include "Modules/Signals/Filters/FilterSlope.mqh"
 #include "Modules/Signals/Filters/FilterTrendMA.mqh"
+#include "Modules/Signals/Filters/FilterTimeWindow.mqh"
 #include "Modules/Guards/GuardManager.mqh"
 #include "Modules/Guards/GuardSession.mqh"
 #include "Modules/Guards/GuardSpread.mqh"
@@ -67,6 +73,8 @@
 #define STRAT_BREAKOUT 2
 #define STRAT_PULLBACK 3
 #define STRAT_NY       4
+#define STRAT_VWAP     5
+#define STRAT_PBO      6
 
 //--- Inputs ---------------------------------------------------------
 input group "=== General ==="
@@ -184,6 +192,36 @@ input double             InpP_TrailStart  = 2.0;            // Exit: trail start
 input double             InpP_TrailDist   = 2.0;            // Exit: trail distance (ATR x)
 input int                InpP_MaxBars     = 0;              // Exit: close after N bars (0 = off)
 
+input group "=== Intraday (S5 VWAP trend, S6 pullback breakout) ==="
+input ENUM_TIMEFRAMES    InpI_TF          = PERIOD_M5;      // Intraday signal timeframe
+input int                InpI_StartH      = 9;              // Trading window start hour (ref GMT+2/+3)
+input int                InpI_StartM      = 0;              // Trading window start minute
+input int                InpI_EndH        = 20;             // Trading window end hour (ref)
+input int                InpI_EndM        = 0;              // Trading window end minute
+input ENUM_TIMEFRAMES    InpI_TrendTF     = PERIOD_H1;      // Trend filter timeframe
+input int                InpI_TrendLen    = 50;             // Trend filter EMA length (0 = off)
+input double             InpI_RiskPct     = 0.30;           // Risk % per intraday trade
+input int                InpI_MaxPerDay   = 6;              // Max trades per day per strategy (0 = no limit)
+input int                InpI_CooldownBars= 3;              // Bars to wait after an exit
+input double             InpI_TPRR        = 1.5;            // Take profit (R)
+input bool               InpI_UseBE       = false;          // Breakeven
+input double             InpI_BETrigger   = 1.0;            // Breakeven trigger (R)
+input int                InpI_EODHour     = 22;             // Close all intraday positions at (ref hour)
+input int                InpI_NewsExit    = 5;              // Close N min before high-impact news (0 = off)
+input int                InpI_AtrLen      = 14;             // ATR length
+input double             InpI_MinSlAtr    = 0.8;            // Min stop (ATR x)
+input double             InpI_MaxSlAtr    = 3.0;            // Max stop (ATR x) - wider setups skipped
+input bool               InpV_Enable      = false;          // S5 VWAP trend: enable (presets 8/10/11 switch it on)
+input int                InpV_AnchorH     = 1;              // S5 VWAP reset hour (ref)
+input double             InpV_TouchAtr    = 0.2;            // S5 pullback must reach VWAP +/- (ATR x)
+input double             InpV_SLBufAtr    = 0.3;            // S5 stop buffer beyond pullback bar (ATR x)
+input bool               InpX_Enable      = false;          // S6 pullback breakout: enable (presets 9/10/11)
+input int                InpX_Fast        = 9;              // S6 fast EMA
+input int                InpX_Slow        = 21;             // S6 slow EMA
+input int                InpX_MaxPull     = 3;              // S6 max pullback candles
+input double             InpX_DepthAtr    = 0.5;            // S6 pullback may pierce slow EMA by (ATR x)
+input double             InpX_SLBufAtr    = 0.1;            // S6 stop buffer (ATR x)
+
 input group "=== Guard: News ==="
 input bool               InpUseNews       = true;           // Block entries around news
 input string             InpNewsCurrencies= "USD";          // Currencies
@@ -203,6 +241,8 @@ input double             InpMaxSpread     = 0.60;           // Max spread (price
 input bool               InpUseDaily      = false;          // Daily limits
 input double             InpDailyMaxLoss  = 3.0;            // Max daily loss %
 input int                InpDailyMaxTrades= 0;              // Max trades per day (0 = off)
+input double             InpDailyTargetUSD= 0;              // Daily profit goal in money - stop for the day (0 = off)
+input double             InpDailyMaxLossUSD= 0;             // Daily loss limit in money - stop for the day (0 = off)
 
 input group "=== Alerts ==="
 input bool               InpAlertPopup    = false;          // Popup alert
@@ -236,7 +276,7 @@ datetime         g_lastExport = 0;
 string           g_healthPrinted = "";  // last health report written to the journal
 string           g_symbol;
 datetime         g_testStart;
-string           g_stratNames[] = {"Trend", "Breakout", "Pullback", "BreakoutNY"};   // index = id - 1
+string           g_stratNames[] = {"Trend", "Breakout", "Pullback", "BreakoutNY", "VWAPTrend", "PullbackBO"};   // index = id - 1
 
 //+------------------------------------------------------------------+
 //| Inputs -> config                                                 |
@@ -280,6 +320,8 @@ void DefaultTrade(STradeSettings &t, const ENUM_EA_TRADE_MODE mode)
    t.deviation       = (int)MathRound(InpMaxSlippage / _Point);   // price -> broker points
    t.comment         = "";
    t.allowHedge      = InpAllowHedge;
+   t.maxPerDay       = 0;
+   t.cooldownSec     = 0;
   }
 
 void BuildConfig(SEAConfig &c)
@@ -288,6 +330,7 @@ void BuildConfig(SEAConfig &c)
    c.trend.s.enabled            = InpT_Enable;
    c.trend.s.tf                 = InpT_TF;
    c.trend.s.atrLen             = InpT_AtrLen;
+   c.trend.s.riskPct = 0.0;
    c.trend.s.exitOnFilteredFlip = InpT_ExitOnFlip;
    c.trend.s.retryBlocked = false;
    c.trend.s.retryMins = 0;
@@ -347,6 +390,7 @@ void BuildConfig(SEAConfig &c)
    c.brk.s.enabled            = InpB_Enable;
    c.brk.s.tf                 = InpB_TF;
    c.brk.s.atrLen             = InpB_AtrLen;
+   c.brk.s.riskPct = 0.0;
    c.brk.s.exitOnFilteredFlip = false;
    DefaultTrade(c.brk.s.trade, InpB_Mode);
    c.brk.s.trade.closeOnOpposite = true;
@@ -421,6 +465,7 @@ void BuildConfig(SEAConfig &c)
    c.pb.s.enabled            = InpP_Enable;
    c.pb.s.tf                 = InpP_TF;
    c.pb.s.atrLen             = InpP_AtrLen;
+   c.pb.s.riskPct = 0.0;
    c.pb.s.exitOnFilteredFlip = false;
    c.pb.s.retryBlocked = false;
    c.pb.s.retryMins = 0;
@@ -446,6 +491,62 @@ void BuildConfig(SEAConfig &c)
    c.pb.pb.atrLen   = InpP_AtrLen;
    c.pb.pb.lookback = 800;
 
+   //--- S5 / S6 intraday strategies (shared intraday settings)
+   c.intra.startHour = InpI_StartH;
+   c.intra.startMin  = InpI_StartM;
+   c.intra.endHour   = InpI_EndH;
+   c.intra.endMin    = InpI_EndM;
+   c.intra.trendTF   = InpI_TrendTF;
+   c.intra.trendLen  = InpI_TrendLen;
+
+   SStrategyCommon ic;
+   ic.enabled            = false;
+   ic.tf                 = InpI_TF;
+   ic.atrLen             = InpI_AtrLen;
+   ic.exitOnFilteredFlip = false;
+   ic.retryBlocked       = false;
+   ic.retryMins          = 0;
+   ic.riskPct            = InpI_RiskPct;
+   DefaultTrade(ic.trade, EA_TRADE_BOTH);
+   ic.trade.closeOnOpposite = false;
+   ic.trade.slMode       = SL_SIGNAL;
+   ic.trade.slAtrMult    = 1.5;
+   ic.trade.tpMode       = TP_RR;
+   ic.trade.tpRR         = InpI_TPRR;
+   ic.trade.maxPerDay    = InpI_MaxPerDay;
+   ic.trade.cooldownSec  = InpI_CooldownBars * PeriodSeconds(InpI_TF == PERIOD_CURRENT ? (ENUM_TIMEFRAMES)_Period : InpI_TF);
+   DefaultExits(ic.exits);
+   ic.exits.unitR           = true;
+   ic.exits.useBE           = InpI_UseBE;
+   ic.exits.beTriggerAtr    = InpI_BETrigger;
+   ic.exits.beLockAtr       = 0.05;
+   ic.exits.useSessionClose = true;
+   ic.exits.closeHour       = InpI_EODHour;
+   ic.exits.newsExitMins    = InpI_NewsExit;
+
+   c.vw.s = ic;
+   c.vw.s.enabled     = InpV_Enable;
+   c.vw.vw.anchorHour = InpV_AnchorH;
+   c.vw.vw.anchorMin  = 0;
+   c.vw.vw.touchAtr   = InpV_TouchAtr;
+   c.vw.vw.slBufAtr   = InpV_SLBufAtr;
+   c.vw.vw.minSlAtr   = InpI_MinSlAtr;
+   c.vw.vw.maxSlAtr   = InpI_MaxSlAtr;
+   c.vw.vw.atrLen     = InpI_AtrLen;
+   c.vw.vw.lookback   = 500;
+
+   c.pbo.s = ic;
+   c.pbo.s.enabled      = InpX_Enable;
+   c.pbo.pbo.fastLen    = InpX_Fast;
+   c.pbo.pbo.slowLen    = InpX_Slow;
+   c.pbo.pbo.maxPull    = InpX_MaxPull;
+   c.pbo.pbo.depthAtr   = InpX_DepthAtr;
+   c.pbo.pbo.slBufAtr   = InpX_SLBufAtr;
+   c.pbo.pbo.minSlAtr   = InpI_MinSlAtr;
+   c.pbo.pbo.maxSlAtr   = InpI_MaxSlAtr;
+   c.pbo.pbo.atrLen     = InpI_AtrLen;
+   c.pbo.pbo.lookback   = 400;
+
    //--- sizing
    c.risk.lotMode     = InpLotMode;
    c.risk.fixedLots   = InpFixedLots;
@@ -466,6 +567,8 @@ void BuildConfig(SEAConfig &c)
    c.daily.profitTargetPct = 0.0;
    c.daily.maxTrades       = InpDailyMaxTrades;
    c.daily.closeOnLimit    = true;
+   c.daily.profitTargetMoney = InpDailyTargetUSD;
+   c.daily.maxLossMoney      = InpDailyMaxLossUSD;
    c.useNews            = InpUseNews;
    c.news.currencies    = InpNewsCurrencies;
    c.news.minImportance = InpNewsImportance;
@@ -525,7 +628,10 @@ bool StartStrategy(CStrategy *st, const int id, const SStrategyCommon &s)
    ENUM_TIMEFRAMES tf = (s.tf == PERIOD_CURRENT) ? (ENUM_TIMEFRAMES)_Period : s.tf;
    AddExits(st, s.exits);
    st.Retry(s.retryBlocked, s.retryMins);
-   if(!st.Init(g_symbol, tf, InpMagic + id, s.trade, g_cfg.risk, s.atrLen, s.exitOnFilteredFlip, GetPointer(g_guards)))
+   SRiskSettings risk = g_cfg.risk;
+   if(s.riskPct > 0.0)
+      risk.riskPercent = s.riskPct;
+   if(!st.Init(g_symbol, tf, InpMagic + id, s.trade, risk, s.atrLen, s.exitOnFilteredFlip, GetPointer(g_guards)))
      {
       PrintFormat("Strategy %s failed to initialise", st.Name());
       delete st;
@@ -605,6 +711,45 @@ bool BuildBreakout(const SBreakoutConfig &c, const int id)
       st.AddSignal(f, ROLE_FILTER);
      }
    return StartStrategy(st, id, c.s);
+  }
+
+//--- shared intraday filters: trading window + higher-TF trend
+void AddIntradayFilters(CStrategy *st)
+  {
+   CFilterTimeWindow *w = new CFilterTimeWindow();
+   w.Configure(g_cfg.intra.startHour, g_cfg.intra.startMin, g_cfg.intra.endHour, g_cfg.intra.endMin);
+   st.AddSignal(w, ROLE_FILTER);
+   if(g_cfg.intra.trendLen > 0)
+     {
+      SFilterTrendMASettings tr;
+      tr.maType   = BASIS_EMA;
+      tr.maLen    = g_cfg.intra.trendLen;
+      tr.lookback = 300;
+      CFilterTrendMA *f = new CFilterTrendMA();
+      f.Configure(tr);
+      f.Timeframe(g_cfg.intra.trendTF);
+      st.AddSignal(f, ROLE_FILTER);
+     }
+  }
+
+bool BuildVWAP(const SVWAPConfig &c)
+  {
+   CStrategy *st = new CStrategy(g_stratNames[STRAT_VWAP - 1]);
+   CSignalVWAPTrend *v = new CSignalVWAPTrend();
+   v.Configure(c.vw);
+   st.AddSignal(v, ROLE_TRIGGER);
+   AddIntradayFilters(st);
+   return StartStrategy(st, STRAT_VWAP, c.s);
+  }
+
+bool BuildPBO(const SPBOConfig &c)
+  {
+   CStrategy *st = new CStrategy(g_stratNames[STRAT_PBO - 1]);
+   CSignalPullbackBO *p = new CSignalPullbackBO();
+   p.Configure(c.pbo);
+   st.AddSignal(p, ROLE_TRIGGER);
+   AddIntradayFilters(st);
+   return StartStrategy(st, STRAT_PBO, c.s);
   }
 
 bool BuildPullback(const SPullbackConfig &c)
@@ -944,6 +1089,10 @@ int OnInit()
       return INIT_PARAMETERS_INCORRECT;
    if(g_cfg.pb.s.enabled && !BuildPullback(g_cfg.pb))
       return INIT_PARAMETERS_INCORRECT;
+   if(g_cfg.vw.s.enabled && !BuildVWAP(g_cfg.vw))
+      return INIT_PARAMETERS_INCORRECT;
+   if(g_cfg.pbo.s.enabled && !BuildPBO(g_cfg.pbo))
+      return INIT_PARAMETERS_INCORRECT;
    if(ArraySize(g_strategies) == 0)
      {
       Print("No strategy enabled");
@@ -1023,11 +1172,14 @@ void OnTick()
 //+------------------------------------------------------------------+
 double OnTester()
   {
-   double score = CTesterCriterion::Calculate(InpCriterion, InpMinTrades);
+   SDailyStats daily;
+   CDailyStats::Compute(g_symbol, InpMagic, daily);
+   double score = CTesterCriterion::Calculate(InpCriterion, InpMinTrades, daily.bestShare);
    if(InpReportResults)
      {
       string build  = EA_VERSION + " " + EA_BUILD;
       string config = ConfigSummary(g_cfg);
+      CTestReporter::WriteConsistency(g_symbol, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, daily);
       CTestReporter::WriteSummary(g_symbol, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, score);
       CTestReporter::WriteStrategyStats(g_symbol, (ENUM_TIMEFRAMES)_Period, (int)InpPreset, build, config, InpMagic, g_stratNames);
      }

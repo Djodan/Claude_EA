@@ -528,3 +528,31 @@ S2 Asian breakout only (preset 2), M1, range 01:00–09:00 ref, entries until 17
 1 trade/day, stop = range side, TP 2R, close 23:00 (or 5 min before session end), no trend filter,
 no news exit, news entry block ±30 min, spread ≤ $0.60, risk 0.8% of min(balance, equity, $100k),
 no hedging, retry off, TZ_NY_CLOSE. Alternative robust config kept as `best_2025_2026.set`.
+
+---
+
+## New goal (2026-09-24): frequent intraday trades for prop consistency
+User: many small trend-based trades per day on M1/M2/M5, later a daily goal (e.g. $200/day) and
+max daily gain; prop consistency rule = best day ≤ 40% of total profit (payout gate, not a fail).
+Research: most common cap 30–40%; fix is many steady days. Best-documented intraday gold edge:
+pullback-window breakout (EMA cross → 1–3 counter candles → break of pullback high; published
+5-year gold test PF 1.64, WR 55%, DD 5.8%); VWAP trend pullbacks in London/NY hours.
+Our own lesson (R4): raw M1 trend following loses to spread/noise → need HTF trend filter, time
+window, tight structure-based stops, small targets.
+
+## v3.00 – intraday toolkit (best_2026 defaults untouched; new strategies via presets 8–11)
+- S5 `VWAPTrend`: session VWAP (tick-volume, resets 01:00 ref); buy when price above VWAP pulls
+  back to VWAP ± 0.2 ATR and closes bullish (short mirror); stop beyond pullback bar, 0.8–3 ATR.
+- S6 `PullbackBO`: EMA 9/21 trend, 1–3 counter candles staying near the slow EMA, entry on a close
+  beyond the pullback extreme; stop beyond the pullback, 0.8–3 ATR.
+- Shared intraday filters: `FilterTimeWindow` (09:00–20:00 ref) + H1 EMA 50 trend filter.
+- Per-strategy risk (intraday 0.30%), max trades/day (6), cooldown (3 bars), TP 1.5R, EOD 22:00,
+  news exit 5 min.
+- Daily money goals in `GuardDailyLimits`: `InpDailyTargetUSD` / `InpDailyMaxLossUSD` (reference day).
+- `consistency.csv` per pass: days, win-day %, trades/day, avg/best/worst day, best-day share %;
+  new criterion `TC_CONSISTENCY` = net profit × min(1, 40 / best-day share %).
+
+## Round 15 – intraday screening (v3.00)
+Grid (20): preset 8 VWAP / 9 PBO / 10 VWAP+PBO / 11 VWAP+PBO+Asian breakout × intraday TF M1–M5.
+Criterion TC_CONSISTENCY. Run 2026 (and 2025 for anything promising).
+Targets: ≥ 3 trades/day, PF ≥ 1.3, best-day share ≤ 40%, max loss < 1%.

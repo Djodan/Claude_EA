@@ -9,6 +9,7 @@
 #include "../Core/Defines.mqh"
 #include "RiskManager.mqh"
 #include "../Guards/GuardManager.mqh"
+#include "../Core/TimeZone.mqh"
 
 #define SIGNAL_OPENED   1
 #define SIGNAL_SKIPPED  0
@@ -30,6 +31,8 @@ struct STradeSettings
    int               deviation;         // max slippage, points
    string            comment;
    bool              allowHedge;        // false = never open against ANY open position on the symbol
+   int               maxPerDay;         // max entries per (reference) day for this strategy, 0 = no limit
+   int               cooldownSec;       // min seconds between the last exit and a new entry, 0 = none
   };
 
 class CTradeManager
@@ -236,6 +239,30 @@ public:
         }
      }
 
+   //--- entries today (reference day) and time of the last exit, this strategy only
+   void              TodayActivity(int &entries, datetime &lastExit) const
+     {
+      entries  = 0;
+      lastExit = 0;
+      datetime now      = TimeCurrent();
+      datetime dayStart = now - (datetime)(CTimeZone::ServerToRef(now) % 86400);
+      if(!HistorySelect(dayStart - 86400, now + 60))
+         return;
+      for(int i = HistoryDealsTotal() - 1; i >= 0; i--)
+        {
+         ulong d = HistoryDealGetTicket(i);
+         if(d == 0 || (ulong)HistoryDealGetInteger(d, DEAL_MAGIC) != m_cfg.magic || HistoryDealGetString(d, DEAL_SYMBOL) != m_symbol)
+            continue;
+         datetime t = (datetime)HistoryDealGetInteger(d, DEAL_TIME);
+         long entry = HistoryDealGetInteger(d, DEAL_ENTRY);
+         if(entry == DEAL_ENTRY_IN && t >= dayStart)
+            entries++;
+         else
+            if(entry != DEAL_ENTRY_IN && t > lastExit)
+               lastExit = t;
+        }
+     }
+
    //--- returns SIGNAL_OPENED, SIGNAL_SKIPPED, or SIGNAL_BLOCKED (a guard said "not now" - may retry)
    int               OnSignal(const SSignal &sig)
      {
@@ -254,6 +281,16 @@ public:
          return SIGNAL_SKIPPED;
       if(CountPositions() >= m_cfg.maxPositions)
          return SIGNAL_SKIPPED;
+      if(m_cfg.maxPerDay > 0 || m_cfg.cooldownSec > 0)
+        {
+         int      entries;
+         datetime lastExit;
+         TodayActivity(entries, lastExit);
+         if(m_cfg.maxPerDay > 0 && entries >= m_cfg.maxPerDay)
+            return SIGNAL_SKIPPED;
+         if(m_cfg.cooldownSec > 0 && lastExit > 0 && TimeCurrent() - lastExit < m_cfg.cooldownSec)
+            return SIGNAL_SKIPPED;
+        }
       if(!m_cfg.allowHedge && OppositeOnSymbol(sig.dir))
         {
          PrintFormat("TradeManager: %s skipped - opposite position open on %s (no hedging)", SignalDirToString(sig.dir), m_symbol);

@@ -12,6 +12,7 @@
 
 #include <Trade/Trade.mqh>
 #include "GuardBase.mqh"
+#include "../Core/TimeZone.mqh"
 
 struct SGuardDailySettings
   {
@@ -19,6 +20,8 @@ struct SGuardDailySettings
    double            profitTargetPct; // 0 = off
    int               maxTrades;       // 0 = off
    bool              closeOnLimit;
+   double            profitTargetMoney; // stop for the day once day P/L >= this (0 = off), e.g. 200
+   double            maxLossMoney;      // stop for the day once day P/L <= -this (0 = off)
   };
 
 class CGuardDailyLimits : public CGuard
@@ -42,9 +45,8 @@ private:
 
    void              Refresh(void)
      {
-      datetime day = iTime(m_symbol, PERIOD_D1, 0);
-      if(day == 0)
-         day = TimeCurrent() - TimeCurrent() % 86400;
+      datetime now = TimeCurrent();
+      datetime day = now - (datetime)(CTimeZone::ServerToRef(now) % 86400);   // start of the reference day
       if(day != m_day)
         {
          m_day        = day;
@@ -91,7 +93,18 @@ private:
    //--- returns true and sets the halt reason if a P/L limit is hit
    bool              PnlLimitHit(void)
      {
-      double pct = DayPnlPct();
+      double pct   = DayPnlPct();
+      double money = m_closedPnl + m_floatPnl;
+      if(m_cfg.maxLossMoney > 0.0 && money <= -m_cfg.maxLossMoney)
+        {
+         m_haltReason = StringFormat("daily loss %.2f hit", money);
+         return true;
+        }
+      if(m_cfg.profitTargetMoney > 0.0 && money >= m_cfg.profitTargetMoney)
+        {
+         m_haltReason = StringFormat("daily target %.2f reached", money);
+         return true;
+        }
       if(m_cfg.maxLossPct > 0.0 && pct <= -m_cfg.maxLossPct)
         {
          m_haltReason = StringFormat("daily loss %.2f%% hit", pct);
@@ -126,6 +139,8 @@ public:
       m_cfg.profitTargetPct = 0.0;
       m_cfg.maxTrades       = 0;
       m_cfg.closeOnLimit    = false;
+      m_cfg.profitTargetMoney = 0.0;
+      m_cfg.maxLossMoney      = 0.0;
      }
 
    void              Configure(const SGuardDailySettings &cfg) { m_cfg = cfg; }
@@ -145,7 +160,7 @@ public:
       Refresh();
       if(!m_halted && PnlLimitHit())
          m_halted = true;
-      m_status = StringFormat("day P/L %.2f%%, trades %d", DayPnlPct(), m_trades);
+      m_status = StringFormat("day P/L %.2f (%.2f%%), trades %d", m_closedPnl + m_floatPnl, DayPnlPct(), m_trades);
       if(m_halted)
         {
          m_status = m_haltReason;
@@ -162,9 +177,9 @@ public:
    //--- check P/L limits every few seconds and flatten if configured
    virtual void      OnTick(void)
      {
-      if(m_cfg.maxLossPct <= 0.0 && m_cfg.profitTargetPct <= 0.0)
+      if(m_cfg.maxLossPct <= 0.0 && m_cfg.profitTargetPct <= 0.0 && m_cfg.maxLossMoney <= 0.0 && m_cfg.profitTargetMoney <= 0.0)
          return;
-      if(TimeCurrent() - m_lastRefresh < 5 && iTime(m_symbol, PERIOD_D1, 0) == m_day)
+      if(TimeCurrent() - m_lastRefresh < 5)
          return;
       Refresh();
       if(m_halted || !PnlLimitHit())
