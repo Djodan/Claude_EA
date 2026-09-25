@@ -556,3 +556,18 @@ window, tight structure-based stops, small targets.
 Grid (20): preset 8 VWAP / 9 PBO / 10 VWAP+PBO / 11 VWAP+PBO+Asian breakout × intraday TF M1–M5.
 Criterion TC_CONSISTENCY. Run 2026 (and 2025 for anything promising).
 Targets: ≥ 3 trades/day, PF ≥ 1.3, best-day share ≤ 40%, max loss < 1%.
+
+**Round 15 results (22 passes, 2026, v3.00, TC_CONSISTENCY):**
+- ❌ S5 VWAP trend: PF 0.86–1.02 (M1 best +2.4k, M2–M5 negative), win 37–41%.
+- ❌ S6 pullback breakout: PF 0.84–0.94 on every TF, win 36–39%. (Published 1.64 PF not reproduced
+  on 2026 M1–M5 gold with these rules.)
+- ❌ Combined with S2: +16.6k PF 1.11 (M5) vs S2 alone +25.0k PF 2.06 – intraday modules dilute it.
+- ✅ **best_2026 (S2 alone) already meets consistency: 134 days, 59.7% winning days, avg +$186/day,
+  best day $1,597 = 6.4% of total (limit 40%), worst day -$899.**
+Conclusion: with ~40% win rate at 1.5R the intraday entries have no edge after costs. The core's
+single 0.8%-risk trade/day already produces steady small days. Keep best_2026 as the core.
+
+## Round 16 – daily $ goal + multi-trade on best_2026 (v3.00)
+Grid (6): daily goal off / $200 / $400 (close + stop for the day) × one trade/day vs multiple.
+Criterion TC_CONSISTENCY. Question: does a daily cap or a second breakout per day add $ without
+hurting PF/consistency?
