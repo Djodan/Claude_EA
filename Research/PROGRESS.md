@@ -627,3 +627,13 @@ stop buffer, min target, max ADX 0–40 · MO: body 0.8–2.0 ATR, close 0.60–
 TP 0.5–3R, M15 trend EMA 0–200 · spread limit off–1.2 · news guard on/off.
 Criterion TC_PROFIT_DD_PCT (profit ÷ equity DD%). Genetic algorithm; explore with 1-min OHLC, then
 verify the top passes with real ticks (1-min OHLC is optimistic for M1 scalps).
+
+**Round 19 results (genetic, 8,095 passes, 1-min OHLC, 2026, TC_PROFIT_DD_PCT):**
+Best: custom 15,453 = +39,114, PF 1.77, DD 2.53%, 270 trades (preset 14, M5) – above best_2026 (~10,000).
+Medians by value (robust patterns): M5 only (M1–M4 median 0) · **Asian-bias align ON** (10,229 vs 0) ·
+momentum TP **0.5R** · close in outer **10%** (0.9) · stop at candle extreme · M15 EMA **100** ·
+window **07–21**, EOD 22 · news ON · MR max ADX 20 · risk 0.8% (top of range) · time exit 60 bars.
+Frequency trade-off: best in 500–800 trades PF 1.27 / DD 5.1%; 800–1200 PF 1.16 / DD 7.3%;
+1200+ PF 1.10 / DD 8.5%.
+⚠️ 0.5R targets on M5 are where 1-min OHLC is most optimistic → verify with real ticks.
+Candidates: R19_A_best (270 tr), R19_B_more (316 tr), R19_C_freq600 (612 tr), R19_D_freq800 (827 tr).
