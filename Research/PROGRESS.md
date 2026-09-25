@@ -517,3 +517,14 @@ Stop stays at the range side; size is recalculated (risk unchanged). Dashboard s
 Grid (16): retry off/on × retry window 60/120/180/240 min × trend filter off / D1 EMA 50 (news exit 5 on).
 Hypothesis: retry adds a handful of trades per month at ≥ baseline PF; entries are later (worse price)
 but the move that survived the news is often the real one.
+
+**Round 14 results (user):** retry after block performed badly on the tested periods → keep OFF.
+(Only the retry-off passes reached results.csv: 2026 no filter 138 tr +24,983 PF 2.06 DD 2.48%;
+D1 EMA 50 + NX5 70 tr +13,132 PF 2.56 DD 1.80%.)
+
+## v2.40 – defaults = best_2026
+User decision: `best_2026` is the best configuration → code defaults now equal it:
+S2 Asian breakout only (preset 2), M1, range 01:00–09:00 ref, entries until 17:00, buffer 0.25 ATR,
+1 trade/day, stop = range side, TP 2R, close 23:00 (or 5 min before session end), no trend filter,
+no news exit, news entry block ±30 min, spread ≤ $0.60, risk 0.8% of min(balance, equity, $100k),
+no hedging, retry off, TZ_NY_CLOSE. Alternative robust config kept as `best_2025_2026.set`.
