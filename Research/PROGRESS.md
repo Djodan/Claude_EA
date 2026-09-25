@@ -571,3 +571,22 @@ single 0.8%-risk trade/day already produces steady small days. Keep best_2026 as
 Grid (6): daily goal off / $200 / $400 (close + stop for the day) × one trade/day vs multiple.
 Criterion TC_CONSISTENCY. Question: does a daily cap or a second breakout per day add $ without
 hurting PF/consistency?
+
+---
+
+## RESET (2026-09-24): v4.00 – dedicated scalper, new default
+User: stop building on best_2026; build a proper scalping bot with many trades per day, then tune.
+best_2026 remains available as preset 2 / `best_2026.set`. **Default preset is now 14 (Scalper).**
+Different behaviour from everything tested before:
+- S7 `MeanRevScalp`: prior close outside Bollinger(20, 2.0) + current close back inside + RSI(7)
+  extreme (<25 / >75) → fade to the middle band (target = SMA). Stop beyond the 2-bar extreme
+  + 0.5 ATR (max 2.5 ATR); skip if the mean is < 0.3 ATR away. Only when M5 ADX ≤ 25 (ranging).
+- S8 `MomentumScalp`: impulse candle (body ≥ 1.2 × prior ATR, close in the outer 25% of the range)
+  in the direction of the M15 EMA 50 → continuation; stop at the candle midpoint, TP 1R.
+- Scalper rules: sessions 10:00–13:00 and 15:30–19:00 ref (London, NY), 0.25% risk, ≤ 10 scalps per
+  engine per day, 2-bar cooldown, time exit 30 bars, breakeven at +0.6R, flat 21:00, news block/exit.
+- Tools: FilterADX max-ADX (ranging regime), FilterTimeWindow second window.
+
+## Round 17 – scalper screening (v4.00)
+Grid (15): preset 12 mean reversion / 13 momentum / 14 both × scalper TF M1–M5. TC_CONSISTENCY.
+Then a single run of the best to get the trade list (hours, R distribution) for fine tuning.

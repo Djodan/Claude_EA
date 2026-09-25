@@ -26,7 +26,11 @@ enum ENUM_EA_PRESET
    PRESET_VWAP     = 8,  // 8 S5 VWAP trend pullback (intraday)
    PRESET_PBO      = 9,  // 9 S6 Pullback-window breakout (intraday)
    PRESET_VWAP_PBO = 10, // 10 S5 + S6 (intraday)
-   PRESET_INTRA_BRK= 11  // 11 S5 + S6 + S2 Asian breakout
+   PRESET_INTRA_BRK= 11, // 11 S5 + S6 + S2 Asian breakout
+   PRESET_SCALP_MR = 12, // 12 Scalper: mean reversion
+   PRESET_SCALP_MO = 13, // 13 Scalper: momentum burst
+   PRESET_SCALP    = 14, // 14 Scalper: mean reversion + momentum
+   PRESET_SCALP_PBO= 15  // 15 Scalper + S6 pullback breakout
   };
 
 void ApplyPreset(const ENUM_EA_PRESET preset, SEAConfig &c)
@@ -38,7 +42,9 @@ void ApplyPreset(const ENUM_EA_PRESET preset, SEAConfig &c)
                         preset == PRESET_INTRA_BRK);
    c.pb.s.enabled    = (preset == PRESET_PULLBACK || preset == PRESET_T_P || preset == PRESET_B_P || preset == PRESET_ALL);
    c.vw.s.enabled    = (preset == PRESET_VWAP || preset == PRESET_VWAP_PBO || preset == PRESET_INTRA_BRK);
-   c.pbo.s.enabled   = (preset == PRESET_PBO || preset == PRESET_VWAP_PBO || preset == PRESET_INTRA_BRK);
+   c.pbo.s.enabled   = (preset == PRESET_PBO || preset == PRESET_VWAP_PBO || preset == PRESET_INTRA_BRK || preset == PRESET_SCALP_PBO);
+   c.mr.s.enabled    = (preset == PRESET_SCALP_MR || preset == PRESET_SCALP || preset == PRESET_SCALP_PBO);
+   c.mo.s.enabled    = (preset == PRESET_SCALP_MO || preset == PRESET_SCALP || preset == PRESET_SCALP_PBO);
   }
 
 #endif

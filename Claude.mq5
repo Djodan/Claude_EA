@@ -13,6 +13,8 @@
 //|    S4 BreakoutNY - NY opening-range breakout (same module as S2)  |
 //|    S5 VWAPTrend  - intraday VWAP trend pullback                  |
 //|    S6 PullbackBO - intraday pullback-window breakout              |
+//|    S7 MeanRevScalp  - Bollinger/RSI fade to the mean (ranging)    |
+//|    S8 MomentumScalp - impulse-candle continuation (trending)      |
 //|                                                                  |
 //|  Modules live in ./Modules:                                      |
 //|    Core/     types, config, presets, new bar, tester reporting   |
@@ -28,10 +30,10 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "3.00"
+#define EA_VERSION "4.00"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
-#property description "XAUUSD portfolio: Asian-range breakout (best_2026) + intraday VWAP-trend and pullback-breakout scalping, prop-firm guards."
+#property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
 
 #include "Modules/Core/Defines.mqh"
 #include "Modules/Core/TimeZone.mqh"
@@ -48,6 +50,8 @@
 #include "Modules/Signals/SignalTrendPullback.mqh"
 #include "Modules/Signals/SignalVWAPTrend.mqh"
 #include "Modules/Signals/SignalPullbackBO.mqh"
+#include "Modules/Signals/SignalMeanRevScalp.mqh"
+#include "Modules/Signals/SignalMomentumScalp.mqh"
 #include "Modules/Signals/Filters/FilterADX.mqh"
 #include "Modules/Signals/Filters/FilterVolatility.mqh"
 #include "Modules/Signals/Filters/FilterSlope.mqh"
@@ -75,11 +79,13 @@
 #define STRAT_NY       4
 #define STRAT_VWAP     5
 #define STRAT_PBO      6
+#define STRAT_MR       7
+#define STRAT_MO       8
 
 //--- Inputs ---------------------------------------------------------
 input group "=== General ==="
 input ENUM_SERVER_TZ     InpServerTZ      = TZ_NY_CLOSE;    // Broker SERVER clock (not the company location!) - dashboard verifies it
-input ENUM_EA_PRESET     InpPreset        = PRESET_BREAKOUT; // Preset (0 = use inputs below)
+input ENUM_EA_PRESET     InpPreset        = PRESET_SCALP;   // Preset (0 = use inputs below; 2 = best_2026)
 input ulong              InpMagic         = 20260900;       // Base magic (strategies use +1, +2, +3)
 input double             InpMaxSlippage   = 0.50;           // Max slippage (price, e.g. 0.50 = $0.50 on gold)
 input ENUM_LOT_MODE      InpLotMode       = LOT_RISK_PERCENT; // Lot mode
@@ -192,6 +198,44 @@ input double             InpP_TrailStart  = 2.0;            // Exit: trail start
 input double             InpP_TrailDist   = 2.0;            // Exit: trail distance (ATR x)
 input int                InpP_MaxBars     = 0;              // Exit: close after N bars (0 = off)
 
+input group "=== Scalper (S7 mean reversion, S8 momentum burst) ==="
+input ENUM_TIMEFRAMES    InpS_TF          = PERIOD_M1;      // Scalper signal timeframe
+input int                InpS_W1StartH    = 10;             // Session 1 start hour (ref GMT+2/+3; London open 10:00)
+input int                InpS_W1StartM    = 0;              // Session 1 start minute
+input int                InpS_W1EndH      = 13;             // Session 1 end hour
+input int                InpS_W1EndM      = 0;              // Session 1 end minute
+input int                InpS_W2StartH    = 15;             // Session 2 start hour (NY open 16:30)
+input int                InpS_W2StartM    = 30;             // Session 2 start minute
+input int                InpS_W2EndH      = 19;             // Session 2 end hour (equal start/end = off)
+input int                InpS_W2EndM      = 0;              // Session 2 end minute
+input double             InpS_RiskPct     = 0.25;           // Risk % per scalp
+input int                InpS_MaxPerDay   = 10;             // Max scalps per day per engine (0 = no limit)
+input int                InpS_CooldownBars= 2;              // Bars to wait after an exit
+input int                InpS_MaxBars     = 30;             // Time exit: close after N bars (0 = off)
+input bool               InpS_UseBE       = true;           // Breakeven
+input double             InpS_BETrigger   = 0.6;            // Breakeven trigger (R)
+input int                InpS_EODHour     = 21;             // Close all scalps at (ref hour)
+input int                InpS_NewsExit    = 5;              // Close N min before high-impact news (0 = off)
+input int                InpS_AtrLen      = 14;             // ATR length
+input bool               InpM_Enable      = false;          // S7 mean reversion: enable (presets 12/14/15)
+input int                InpM_BBLen       = 20;             // S7 Bollinger length
+input double             InpM_BBDev       = 2.0;            // S7 Bollinger deviation
+input int                InpM_RSILen      = 7;              // S7 RSI length
+input double             InpM_RSILow      = 25;             // S7 RSI oversold
+input double             InpM_RSIHigh     = 75;             // S7 RSI overbought
+input double             InpM_SLBufAtr    = 0.5;            // S7 stop buffer beyond extreme (ATR x)
+input double             InpM_MaxSlAtr    = 2.5;            // S7 max stop (ATR x)
+input double             InpM_MinTpAtr    = 0.3;            // S7 min distance to target (ATR x)
+input ENUM_TIMEFRAMES    InpM_RegimeTF    = PERIOD_M5;      // S7 regime (ADX) timeframe
+input double             InpM_MaxAdx      = 25;             // S7 only trade when ADX <= this (0 = off)
+input bool               InpK_Enable      = false;          // S8 momentum burst: enable (presets 13/14/15)
+input double             InpK_BodyAtr     = 1.2;            // S8 impulse body >= (ATR x)
+input double             InpK_ClosePct    = 0.75;           // S8 close in outer part of candle (0.75 = top 25%)
+input ENUM_IMPULSE_STOP  InpK_StopMode    = IMPULSE_STOP_MID; // S8 stop placement
+input double             InpK_TPRR        = 1.0;            // S8 take profit (R)
+input ENUM_TIMEFRAMES    InpK_TrendTF     = PERIOD_M15;     // S8 trend filter timeframe
+input int                InpK_TrendLen    = 50;             // S8 trend EMA length (0 = off)
+
 input group "=== Intraday (S5 VWAP trend, S6 pullback breakout) ==="
 input ENUM_TIMEFRAMES    InpI_TF          = PERIOD_M5;      // Intraday signal timeframe
 input int                InpI_StartH      = 9;              // Trading window start hour (ref GMT+2/+3)
@@ -276,7 +320,7 @@ datetime         g_lastExport = 0;
 string           g_healthPrinted = "";  // last health report written to the journal
 string           g_symbol;
 datetime         g_testStart;
-string           g_stratNames[] = {"Trend", "Breakout", "Pullback", "BreakoutNY", "VWAPTrend", "PullbackBO"};   // index = id - 1
+string           g_stratNames[] = {"Trend", "Breakout", "Pullback", "BreakoutNY", "VWAPTrend", "PullbackBO", "MeanRevScalp", "MomentumScalp"};   // index = id - 1
 
 //+------------------------------------------------------------------+
 //| Inputs -> config                                                 |
@@ -547,6 +591,65 @@ void BuildConfig(SEAConfig &c)
    c.pbo.pbo.atrLen     = InpI_AtrLen;
    c.pbo.pbo.lookback   = 400;
 
+   //--- S7 / S8 scalper (shared scalper settings)
+   c.scalp.w1StartH = InpS_W1StartH;
+   c.scalp.w1StartM = InpS_W1StartM;
+   c.scalp.w1EndH   = InpS_W1EndH;
+   c.scalp.w1EndM   = InpS_W1EndM;
+   c.scalp.w2StartH = InpS_W2StartH;
+   c.scalp.w2StartM = InpS_W2StartM;
+   c.scalp.w2EndH   = InpS_W2EndH;
+   c.scalp.w2EndM   = InpS_W2EndM;
+   c.scalp.regimeTF = InpM_RegimeTF;
+   c.scalp.maxAdx   = InpM_MaxAdx;
+   c.scalp.trendTF  = InpK_TrendTF;
+   c.scalp.trendLen = InpK_TrendLen;
+
+   SStrategyCommon sc = ic;
+   sc.tf                  = InpS_TF;
+   sc.atrLen              = InpS_AtrLen;
+   sc.riskPct             = InpS_RiskPct;
+   sc.trade.maxPerDay     = InpS_MaxPerDay;
+   sc.trade.cooldownSec   = InpS_CooldownBars * PeriodSeconds(InpS_TF == PERIOD_CURRENT ? (ENUM_TIMEFRAMES)_Period : InpS_TF);
+   DefaultExits(sc.exits);
+   sc.exits.unitR           = true;
+   sc.exits.useBE           = InpS_UseBE;
+   sc.exits.beTriggerAtr    = InpS_BETrigger;
+   sc.exits.beLockAtr       = 0.05;
+   sc.exits.useTimeExit     = InpS_MaxBars > 0;
+   sc.exits.timeExitBars    = InpS_MaxBars;
+   sc.exits.useSessionClose = true;
+   sc.exits.closeHour       = InpS_EODHour;
+   sc.exits.newsExitMins    = InpS_NewsExit;
+
+   c.mr.s = sc;
+   c.mr.s.enabled       = InpM_Enable;
+   c.mr.s.trade.tpMode  = TP_RR;          // fallback only - the signal's own target (middle band) is used
+   c.mr.s.trade.tpRR    = 1.0;
+   c.mr.mr.bbLen        = InpM_BBLen;
+   c.mr.mr.bbDev        = InpM_BBDev;
+   c.mr.mr.rsiLen       = InpM_RSILen;
+   c.mr.mr.rsiLow       = InpM_RSILow;
+   c.mr.mr.rsiHigh      = InpM_RSIHigh;
+   c.mr.mr.slBufAtr     = InpM_SLBufAtr;
+   c.mr.mr.maxSlAtr     = InpM_MaxSlAtr;
+   c.mr.mr.minTpAtr     = InpM_MinTpAtr;
+   c.mr.mr.atrLen       = InpS_AtrLen;
+   c.mr.mr.lookback     = 300;
+
+   c.mo.s = sc;
+   c.mo.s.enabled       = InpK_Enable;
+   c.mo.s.trade.tpMode  = TP_RR;
+   c.mo.s.trade.tpRR    = InpK_TPRR;
+   c.mo.mo.bodyAtr      = InpK_BodyAtr;
+   c.mo.mo.closePct     = InpK_ClosePct;
+   c.mo.mo.stopMode     = InpK_StopMode;
+   c.mo.mo.slBufAtr     = 0.1;
+   c.mo.mo.minSlAtr     = 0.5;
+   c.mo.mo.maxSlAtr     = 2.5;
+   c.mo.mo.atrLen       = InpS_AtrLen;
+   c.mo.mo.lookback     = 200;
+
    //--- sizing
    c.risk.lotMode     = InpLotMode;
    c.risk.fixedLots   = InpFixedLots;
@@ -730,6 +833,62 @@ void AddIntradayFilters(CStrategy *st)
       f.Timeframe(g_cfg.intra.trendTF);
       st.AddSignal(f, ROLE_FILTER);
      }
+  }
+
+//--- scalper session windows (London + New York by default)
+void AddScalpWindow(CStrategy *st)
+  {
+   CFilterTimeWindow *w = new CFilterTimeWindow();
+   w.Configure(g_cfg.scalp.w1StartH, g_cfg.scalp.w1StartM, g_cfg.scalp.w1EndH, g_cfg.scalp.w1EndM);
+   w.Configure2(g_cfg.scalp.w2StartH, g_cfg.scalp.w2StartM, g_cfg.scalp.w2EndH, g_cfg.scalp.w2EndM);
+   st.AddSignal(w, ROLE_FILTER);
+  }
+
+bool BuildMeanRev(const SMeanRevConfig &c)
+  {
+   CStrategy *st = new CStrategy(g_stratNames[STRAT_MR - 1]);
+   CSignalMeanRevScalp *m = new CSignalMeanRevScalp();
+   m.Configure(c.mr);
+   st.AddSignal(m, ROLE_TRIGGER);
+   AddScalpWindow(st);
+   if(g_cfg.scalp.maxAdx > 0.0)
+     {
+      SFilterADXSettings a;
+      a.diLen         = 14;
+      a.adxLen        = 14;
+      a.minAdx        = 0.0;
+      a.maxAdx        = g_cfg.scalp.maxAdx;
+      a.requireDI     = false;
+      a.requireRising = false;
+      a.lookback      = 300;
+      CFilterADX *f = new CFilterADX();
+      f.Configure(a);
+      f.Name("Regime ADX");
+      f.Timeframe(g_cfg.scalp.regimeTF);
+      st.AddSignal(f, ROLE_FILTER);
+     }
+   return StartStrategy(st, STRAT_MR, c.s);
+  }
+
+bool BuildMomentum(const SMomentumConfig &c)
+  {
+   CStrategy *st = new CStrategy(g_stratNames[STRAT_MO - 1]);
+   CSignalMomentumScalp *m = new CSignalMomentumScalp();
+   m.Configure(c.mo);
+   st.AddSignal(m, ROLE_TRIGGER);
+   AddScalpWindow(st);
+   if(g_cfg.scalp.trendLen > 0)
+     {
+      SFilterTrendMASettings tr;
+      tr.maType   = BASIS_EMA;
+      tr.maLen    = g_cfg.scalp.trendLen;
+      tr.lookback = 300;
+      CFilterTrendMA *f = new CFilterTrendMA();
+      f.Configure(tr);
+      f.Timeframe(g_cfg.scalp.trendTF);
+      st.AddSignal(f, ROLE_FILTER);
+     }
+   return StartStrategy(st, STRAT_MO, c.s);
   }
 
 bool BuildVWAP(const SVWAPConfig &c)
@@ -1092,6 +1251,10 @@ int OnInit()
    if(g_cfg.vw.s.enabled && !BuildVWAP(g_cfg.vw))
       return INIT_PARAMETERS_INCORRECT;
    if(g_cfg.pbo.s.enabled && !BuildPBO(g_cfg.pbo))
+      return INIT_PARAMETERS_INCORRECT;
+   if(g_cfg.mr.s.enabled && !BuildMeanRev(g_cfg.mr))
+      return INIT_PARAMETERS_INCORRECT;
+   if(g_cfg.mo.s.enabled && !BuildMomentum(g_cfg.mo))
       return INIT_PARAMETERS_INCORRECT;
    if(ArraySize(g_strategies) == 0)
      {

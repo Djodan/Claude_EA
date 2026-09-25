@@ -13,7 +13,8 @@ struct SFilterADXSettings
   {
    int               diLen;
    int               adxLen;
-   double            minAdx;
+   double            minAdx;         // 0 = no minimum
+   double            maxAdx;         // 0 = no maximum (set e.g. 25 to trade only ranging markets)
    bool              requireDI;      // +DI > -DI for buys, -DI > +DI for sells
    bool              requireRising;  // ADX higher than on the previous bar
    int               lookback;
@@ -33,6 +34,7 @@ public:
       m_cfg.diLen         = 14;
       m_cfg.adxLen        = 14;
       m_cfg.minAdx        = 20.0;
+      m_cfg.maxAdx        = 0.0;
       m_cfg.requireDI     = false;
       m_cfg.requireRising = false;
       m_cfg.lookback      = 500;
@@ -76,6 +78,8 @@ public:
      {
       if(CPineTA::IsNA(m_adx[i]) || m_adx[i] < m_cfg.minAdx)
          return false;
+      if(m_cfg.maxAdx > 0.0 && m_adx[i] > m_cfg.maxAdx)
+         return false;
       if(m_cfg.requireRising && (CPineTA::IsNA(m_adx[i - 1]) || m_adx[i] <= m_adx[i - 1]))
          return false;
       if(m_cfg.requireDI)
@@ -94,7 +98,7 @@ public:
          return "waiting for data";
       double a = m_adx[m_n - 1];
       return StringFormat("%.1f (+DI %.1f / -DI %.1f) %s", a, m_plus[m_n - 1], m_minus[m_n - 1],
-                          a >= m_cfg.minAdx ? "TRENDING" : "WEAK");
+                          (m_cfg.maxAdx > 0.0 ? (a <= m_cfg.maxAdx && a >= m_cfg.minAdx ? "RANGING OK" : "TOO STRONG") : (a >= m_cfg.minAdx ? "TRENDING" : "WEAK")));
      }
   };
 
