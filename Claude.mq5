@@ -30,7 +30,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.10"
+#define EA_VERSION "4.20"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -200,21 +200,21 @@ input int                InpP_MaxBars     = 0;              // Exit: close after
 
 input group "=== Scalper (S7 mean reversion, S8 momentum burst) ==="
 input ENUM_TIMEFRAMES    InpS_TF          = PERIOD_M1;      // Scalper signal timeframe
-input int                InpS_W1StartH    = 10;             // Session 1 start hour (ref GMT+2/+3; London open 10:00)
+input int                InpS_W1StartH    = 0;             // Session 1 start hour (ref GMT+2/+3) - default all day
 input int                InpS_W1StartM    = 0;              // Session 1 start minute
-input int                InpS_W1EndH      = 13;             // Session 1 end hour
+input int                InpS_W1EndH      = 23;             // Session 1 end hour (entries stop; EOD close separate)
 input int                InpS_W1EndM      = 0;              // Session 1 end minute
-input int                InpS_W2StartH    = 15;             // Session 2 start hour (NY open 16:30)
-input int                InpS_W2StartM    = 30;             // Session 2 start minute
-input int                InpS_W2EndH      = 19;             // Session 2 end hour (equal start/end = off)
+input int                InpS_W2StartH    = 0;             // Session 2 start hour (equal start/end = off)
+input int                InpS_W2StartM    = 0;             // Session 2 start minute
+input int                InpS_W2EndH      = 0;             // Session 2 end hour (equal start/end = off)
 input int                InpS_W2EndM      = 0;              // Session 2 end minute
 input double             InpS_RiskPct     = 0.25;           // Risk % per scalp
-input int                InpS_MaxPerDay   = 10;             // Max scalps per day per engine (0 = no limit)
-input int                InpS_CooldownBars= 2;              // Bars to wait after an exit
+input int                InpS_MaxPerDay   = 0;             // Max scalps per day per engine (0 = no limit)
+input int                InpS_CooldownBars= 0;              // Bars to wait after an exit (0 = none)
 input int                InpS_MaxBars     = 30;             // Time exit: close after N bars (0 = off)
 input bool               InpS_UseBE       = false;          // Breakeven (R17: scratched winners)
 input double             InpS_BETrigger   = 0.6;            // Breakeven trigger (R)
-input int                InpS_EODHour     = 21;             // Close all scalps at (ref hour)
+input int                InpS_EODHour     = 23;             // Close all scalps at (ref hour)
 input int                InpS_NewsExit    = 5;              // Close N min before high-impact news (0 = off)
 input int                InpS_AtrLen      = 14;             // ATR length
 input bool               InpS_AlignAsian  = true;           // Only scalp in the direction price broke the Asian range

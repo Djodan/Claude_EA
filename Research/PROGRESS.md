@@ -610,3 +610,20 @@ one proven edge (S2 PF ≈ 2.06). BE default off.
 ## Round 18 (36 passes)
 preset 12 MR / 13 MO / 14 both × align off/on × BE off/on × TF M1 / M3 / M5. TC_CONSISTENCY.
 Hypothesis: alignment turns the ~0R scalps positive (the S2 edge is the direction of the day).
+
+## Change of approach (user, 2026-09-24): broad search first, limits later
+Start unrestricted and let the optimizer find what works (incl. position sizing); add daily caps /
+session limits only in later rounds.
+
+## v4.20 – unrestricted scalper defaults
+Sessions 00:00–23:00 ref (second window off), no max trades/day, no cooldown, flat 23:00, no daily
+cap. Round 18 set superseded.
+
+## Round 19 – broad genetic search (26 inputs)
+Engines (preset 12 MR / 13 MO / 14 both / 15 both + S6) · TF M1–M5 · entry window start 01–15 /
+end 11–23 · **risk 0.1–0.8%** · time exit 0–60 bars · cooldown 0–6 · BE on/off + trigger 0.5–1.5R ·
+Asian-bias align on/off · EOD 21–23 · MR: BB 10–40 / 1.5–3.0σ, RSI 3–13 len, 10–35 / 65–90 levels,
+stop buffer, min target, max ADX 0–40 · MO: body 0.8–2.0 ATR, close 0.60–0.90, stop mid/extreme,
+TP 0.5–3R, M15 trend EMA 0–200 · spread limit off–1.2 · news guard on/off.
+Criterion TC_PROFIT_DD_PCT (profit ÷ equity DD%). Genetic algorithm; explore with 1-min OHLC, then
+verify the top passes with real ticks (1-min OHLC is optimistic for M1 scalps).
