@@ -789,3 +789,18 @@ the new truncation check flagged it. Sets are now built with ≤ 240-char fields
   optimises **InpPreset 12–14** (MR / MO / both) instead of the two enables → 24 optimised inputs, no empty passes.
   Round28_GBP_Prop keeps the 4 enables (1 in 16 combos empty – rejected, harmless). Config summary shows FX spread
   limits with 5 decimals (was "SPR0.00").
+
+## Round 30 – 5 uncorrelated pairs, one trade idea each (prop: ≤ 1% per trade idea)
+Goal: losses spread over independent ideas/markets instead of one gold engine. Each idea optimised alone on its own
+chart ($100k, 0.5% risk fixed during optimisation, daily limits off, news AUTO), final risk per idea from its worst-trade R
+(worst loss ≤ 0.8%, 1% hard), then one portfolio set via the v4.52 Pair inputs + an account-wide daily stop.
+| # | Pair | Idea | Engine | Set |
+|---|---|---|---|---|
+| 1 | XAUUSD | Asian-range breakout + pullback | S2 + S3 | New_Prop_High/Low_Risk (done) |
+| 2 | USDJPY | H1–H4 trend following | S1 DJ Trend + filters | Round30_USDJPY_Trend (22 inputs) |
+| 3 | EURGBP | range mean reversion (low-ADX regime) | S7 | Round30_EURGBP_MeanRev (20) |
+| 4 | GBPUSD | London-open breakout | S2 | Round30_GBPUSD_LondonBO (20) |
+| 5 | BITCOIN | momentum bursts | S8 | Round30_BTC_Momentum (16; spread ≤ 10% D1 ATR, USD news) |
+Spread/slippage limits: JPY 0.03, EURGBP/GBPUSD 0.0003 (3 pips). BITCOIN: local tick data is thin (tester must download
+2026) – if it fails, swap to USDCAD (oil-driven) or NZDJPY. After the runs: correlation of the ideas' DAILY P/L (from the
+trades CSVs), keep the pairs with low correlation and PF ≥ 1.3 on 2026 and 2025.
