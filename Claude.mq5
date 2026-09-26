@@ -33,7 +33,7 @@
 //|  wide. "Symbol slot" lets the optimiser run the pairs one by one.|
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.50"
+#define EA_VERSION "4.51"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -1002,11 +1002,13 @@ bool RegisterGuards(const SEAConfig &c)
       g.Configure(c.session);
       g_eng.guards.Add(g);
      }
-   if(c.maxSpread > 0.0 || c.spreadAtrPct > 0.0)
+   if(c.maxSpread > 0.0 || (c.spreadAtrPct > 0.0 && g_eng.spec.spread < 0.0))
      {
       CGuardSpread *g = new CGuardSpread();
-      // % of daily ATR if set; else chart symbol: the input as is, other symbols: the same % of price unless overridden
-      g.Configure(c.maxSpread, g_eng.spec.spread >= 0.0 ? "" : _Symbol, c.spreadAtrPct);
+      // a per-symbol spread override is absolute; else % of daily ATR if set; else chart symbol: the input as is,
+      // other symbols: the same % of price
+      bool own = g_eng.spec.spread >= 0.0;
+      g.Configure(c.maxSpread, own ? "" : _Symbol, own ? 0.0 : c.spreadAtrPct);
       g_eng.guards.Add(g);
      }
    if(c.useActivity)

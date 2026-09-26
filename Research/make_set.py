@@ -81,7 +81,7 @@ def main():
     fixed = {}       # NAME=value           -> overrides the code default
     for arg in args[1:]:
         key, spec = arg.split("=", 1)
-        if ":" in spec:
+        if ":" in spec and not spec.startswith('"'):    # quoted strings may contain ':' (symbol overrides)
             ranges[key] = spec.split(":")
         else:
             fixed[key] = spec

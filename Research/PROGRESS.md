@@ -717,3 +717,13 @@ New: InpSpreadAtrPct (spread limit = % of the pair's D1 ATR), GuardActivity (per
 hourly tick-volume profile, InpUseActivity/Min/Days), per-pair profiles (Common\Files\ClaudeEA\profiles\
 <SYMBOL>.set, any input; all BuildConfig reads go through PD/PL/PB/PS accessors). make_set.py --profile.
 Round25_PairAdapt: Top1 settings × 10 pairs × spread-ATR 0–3% × activity off/on 0.6–1.4 (slow complete, 400 passes).
+
+## Round 26 – $1k multi-pair cash sets (v4.51: a per-symbol spread override beats the ATR % mode)
+All: R19_B scalper engines, $1k, compounding, weekend close, daily limits account-wide.
+| Set | Symbols | Risk | Day stop |
+|---|---|---|---|
+| Final_Cash_200PerDay_Multi | XAU (10%) + XAG, EURUSD, GBPUSD, USDJPY (5%) | as listed | +$200 / −30% |
+| Cash_Multi_Conservative | same 5 | 5% | +10% of balance / −15% |
+| Cash_Multi_Metals | XAUUSD, XAGUSD, XAUEUR | 7% | +$200 / −25% |
+| Cash_Multi_Wide_Adaptive | 8 (metals, majors, JPY crosses), activity filter 0.8, spread ≤ 2.5% D1 ATR | 3% | +20% / −25% |
+Non-gold pairs untested with these settings.
