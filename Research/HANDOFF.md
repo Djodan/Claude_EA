@@ -118,11 +118,11 @@ python Research/make_set.py <Name> [--exact-name] [--profile] NAME=value NAME=st
 | Set | Use | Status |
 |---|---|---|
 | New_Prop_Low_Risk | Prop keep/pass: Top_2 at 0.6%, day stop −2% | tested: +18.3k PF 2.68 DD 1.86% worst 0.60% |
-| New_Prop_High_Risk | Prop challenge: scalper 0.7% + Top_1 swing 0.45%, day −3% | derived; expect ≈ +60k, worst ≈ 0.74% |
-| New_1k_1 | $1k high risk, $200/day (legacy-pinned) | must reproduce $13,216.98 |
-| New_1k_2 | same, daily target 20% of balance | untested |
+| New_Prop_High_Risk | Prop challenge: scalper 0.7% + Top_1 swing 0.45%, day −3% | tested: +64.6k PF 1.64 DD 3.78% worst 0.746% |
+| New_1k_1 | $1k high risk, $200/day (legacy-pinned) | tested: $13,216.98 ✅ (v4.51 regression OK) |
+| New_1k_2 | same, daily target 20% of balance | tested: +36.3k PF 1.29 DD 36.5% |
 | Final_Lowest_DD | Top_2 at 0.4% | +11.8k DD 1.36% (regression check for v4.40+: 127 trades, +11,767.93) |
-| Cash_Multi_* / Final_Cash_200PerDay_Multi | $1k multi-pair variants | untested |
+| Cash_Multi_* / Final_Cash_200PerDay_Multi | $1k multi-pair variants | worse than gold-only (Round 27) |
 | Round24_PairScan / Round25_PairAdapt / Round24_PairOptimize / Round22_Cash200_HighRisk | pair & $1k optimisations | not yet run properly |
 
 ## 7. Open to-dos

@@ -739,3 +739,18 @@ Only best_2025_2026 is proven in both years (2025 PF 1.47, 2026 PF 2.59); everyt
   0.7% and swing 0.45% → worst trade ≈ 0.74%; day stop −3%. Expect ≈ +60k, DD ≈ 3.5–4%.
 - **New_Prop_Low_Risk** = Top_2 at 0.6% exactly as tested: +18.3k PF 2.68 DD 1.86% worst 0.60%; day stop −2%.
 Both pin the v4.40+ inputs to single-gold behaviour. To do: run both on 2025 (out-of-sample).
+
+## Round 27 – v4.51 deliverable checks (real ticks, 2026.01.01–2026.09.24)
+| Set | Deposit | Net | PF | DD | Trades | Max loss | Best day |
+|---|---|---|---|---|---|---|---|
+| **New_Prop_High_Risk** | $100k | **+64.6k** | 1.64 | 3.78% | 563 | **0.746%** ✅ | 8.1% |
+| New_1k_1 | $1k | +12,216.98 (**= $13,216.98 ✅ regression**) | 1.71 | 29.1% | 187 | – | 13.2% |
+| New_1k_2 (20% target) | $1k | +36.3k | 1.29 | 36.5% | 305 | – | 21.0% |
+| Cash_Multi_Metals (XAU+XAG+XAUEUR 7%) | $1k | +7.0k | 1.50 | 26.4% | 231 | – | 10.5% |
+| Final_Cash_200PerDay_Multi (5 pairs) | $1k | +4.5k | 1.32 | **57.0%** | 360 | – | 13.8% |
+| Cash_Multi_Wide_Adaptive (8 pairs 3%) | $1k | −5 | 1.00 | 51.2% | 449 | – | – |
+- Prop High Risk meets every rule (worst trade 0.746% < 0.8%, best day 8% < 40%), matches the ≈ +60k estimate.
+- v4.51 regression confirmed (New_1k_1 reproduces the v4.31 result to the cent).
+- New_1k_2: the 20% target changes little vs pure 10% compounding (+44.4k PF 1.31) – PF/DD worse than New_1k_1.
+- Multi-pair $1k: every extra pair lowers PF and raises DD; untuned non-gold pairs add no edge. Gold-only stays best.
+- Still to run: New_Prop_Low_Risk 2026 + both prop sets on 2025 (out-of-sample).
