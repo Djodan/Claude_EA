@@ -317,7 +317,7 @@ string ConfigSummary(const SEAConfig &c)
    if(c.spreadAtrPct > 0.0)
       s += StringFormat(" SPR%.1f%%ATR", c.spreadAtrPct);
    else if(c.maxSpread > 0.0)
-      s += StringFormat(" SPR%.2f", c.maxSpread);
+      s += c.maxSpread >= 0.01 || c.maxSpread == 0.0 ? StringFormat(" SPR%.2f", c.maxSpread) : StringFormat(" SPR%.5f", c.maxSpread);   // FX pips
    if(c.useActivity)
       s += StringFormat(" ACT%.2f", c.activityMin);
    return s;

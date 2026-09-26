@@ -785,3 +785,7 @@ to New_1k_1 ✅**. The pair-settings path reproduces a full set through 68 text 
 250-char fields: MT5 cut fields 2/3 at 243 chars (lost P_TPMode, I_MaxSlAtr – disabled strategies, so no effect) and
 the new truncation check flagged it. Sets are now built with ≤ 240-char fields. (A first run at $100k deposit,
 +1,307 PF 1.01, is not comparable – wrong deposit.)
+- Round28_GBP_1k: genetic passes with S7 and S8 both off stop with "no strategy enabled" (wasted passes). The set now
+  optimises **InpPreset 12–14** (MR / MO / both) instead of the two enables → 24 optimised inputs, no empty passes.
+  Round28_GBP_Prop keeps the 4 enables (1 in 16 combos empty – rejected, harmless). Config summary shows FX spread
+  limits with 5 decimals (was "SPR0.00").
