@@ -1,6 +1,6 @@
 # Claude EA – handoff (state at save 40, EA v4.51, 2026-09-26)
 
-Read this first in a new chat. Detailed history of every test round: `Research/PROGRESS.md`.
+Read this first in a new chat (CLAUDE.md, auto-loaded, holds the repo / commit / naming rules). Detailed history of every test round: `Research/PROGRESS.md`.
 Portability / live deployment guide: `DEPLOY.md`.
 
 ## 1. Project & working rules
