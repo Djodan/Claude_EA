@@ -829,3 +829,11 @@ cooldown · news exit/guard/before/after · Asian range hours · all MR (BB, RSI
 close %, stop mode, TP 0.3–2R, trend TF/EMA) inputs · spread limit 0.3–1.2. Criterion TC_PROFIT_DD_PCT, min 150 trades.
 Run: XAUUSD M1, $1k, 2026.01.01–2026.09.21, 1-min OHLC, fast genetic, Custom max (2–3 runs). Verify top passes on real
 ticks (1-min OHLC is optimistic for M1–M3 scalps) and on 2025.
+
+## Round 32 – New1_Prop_High_Risk improvement search ($100k prop)
+Baseline (real ticks 2026): +64,630 PF 1.64 DD 3.78%, 563 trades, worst trade 0.746%, best day 8.1%, criterion ≈ 17,114.
+`Round32_PropHigh_Optimize` = New1_Prop_High_Risk with 50 inputs optimised (start values = baseline):
+prop-safe sizing (S2/S3 risk 0.2–0.6%, scalper 0.3–0.8%) + day stop 2–4% · S2/S3/S7/S8 on/off · S2 (TF, range hours,
+last entry, buffer, max range, TP 1.5–4.5R, BE, trend filter, EOD, news exit, retry) · S3 (TF M5–H4, EMAs, RSI levels,
+SL/TP, time exit) · scalper (TF, window, EOD, time exit, Asian bias, news exit, key MR/MO inputs) · news window, spread.
+Criterion TC_PROFIT_DD_PCT, min 100 trades. Filter passes on consistency.csv: max_loss_pct ≤ 0.8, best-day share ≤ 40%.
