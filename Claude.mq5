@@ -33,7 +33,7 @@
 //|  wide. "Symbol slot" lets the optimiser run the pairs one by one.|
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.40"
+#define EA_VERSION "4.50"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -50,6 +50,8 @@
 #include "Modules/Strategy/Strategy.mqh"
 #include "Modules/Strategy/SymbolEngine.mqh"
 #include "Modules/Core/SymbolList.mqh"
+#include "Modules/Core/Profile.mqh"
+#include "Modules/Guards/GuardActivity.mqh"
 #include "Modules/Signals/SignalDJTrend.mqh"
 #include "Modules/Signals/SignalSessionBreakout.mqh"
 #include "Modules/Signals/SignalTrendPullback.mqh"
@@ -105,6 +107,10 @@ input double             InpAccountSize   = 100000;         // Account size cap 
 input group "=== Symbols (multi-pair) ==="
 input string             InpSymbols       = "";             // Symbols, comma-separated ("" = chart symbol). Overrides: EURUSD:spread=0.0002;slip=0.0003;risk=0.5;srisk=0.3
 input int                InpSymbolSlot    = 0;              // Trade only the Nth symbol of the list (0 = all) - optimise 1..N to test pairs one by one
+input bool               InpUseProfiles   = false;          // Per-pair profiles: Common\Files\ClaudeEA\profiles\<SYMBOL>.set replaces inputs for that pair
+input bool               InpUseActivity   = false;          // Trade only in each pair's own active hours (hourly tick-volume profile)
+input double             InpActivityMin   = 0.8;            // Active hour = volume >= this x the pair's mean hourly volume
+input int                InpActivityDays  = 20;             // Days of H1 history for the volume profile
 
 input group "=== S1 Trend: DJ Trend flip ==="
 input bool               InpT_Enable      = true;           // Enable
@@ -295,6 +301,7 @@ input int                InpSessStartH    = 9;              // Start hour
 input int                InpSessEndH      = 22;             // End hour
 input bool               InpTradeFri      = true;           // Trade Fridays
 input double             InpMaxSpread     = 0.60;           // Max spread (price, e.g. 0.60 = $0.60 on gold; 0 = off)
+input double             InpSpreadAtrPct  = 0;              // Max spread as % of the pair's daily ATR (0 = use the price limit) - adapts to every pair
 input bool               InpUseDaily      = false;          // Daily limits
 input double             InpDailyMaxLoss  = 3.0;            // Max daily loss %
 input int                InpDailyMaxTrades= 0;              // Max trades per day (0 = off)
@@ -325,6 +332,7 @@ input bool               InpExportTrades  = true;           // Export trade list
 SEAConfig        g_cfg;                 // inputs + preset; each engine holds a copy with its symbol overrides
 CSymbolEngine   *g_engines[];           // one engine per traded symbol
 CSymbolEngine   *g_eng = NULL;          // engine being built (used by the Build* functions)
+CProfile        *g_prof = NULL;         // profile of the symbol being configured (NULL = inputs only)
 string           g_symbolIssue = "";    // problems in the Symbols input (dashboard)
 CChartDrawer     g_drawer;
 CDashboard       g_dashboard;
@@ -333,6 +341,12 @@ string           g_healthPrinted = "";  // last health report written to the jou
 string           g_symbol;
 datetime         g_testStart;
 string           g_stratNames[] = {"Trend", "Breakout", "Pullback", "BreakoutNY", "VWAPTrend", "PullbackBO", "MeanRevScalp", "MomentumScalp"};   // index = id - 1
+
+//--- input value, or the per-pair profile's value when one is being applied
+double PD(const string k, const double v) { return g_prof == NULL ? v : g_prof.D(k, v); }
+long   PL(const string k, const long v)   { return g_prof == NULL ? v : g_prof.L(k, v); }
+bool   PB(const string k, const bool v)   { return g_prof == NULL ? v : g_prof.B(k, v); }
+string PS(const string k, const string v) { return g_prof == NULL ? v : g_prof.S(k, v); }
 
 string SymbolsLabel(const string sep)
   {
@@ -389,10 +403,10 @@ void DefaultTrade(STradeSettings &t, const ENUM_EA_TRADE_MODE mode)
    t.tpAtrMult       = 3.0;
    t.tpPoints        = 0;
    t.tpRR            = 2.0;
-   t.magic           = InpMagic;
-   t.deviation       = (int)MathRound(InpMaxSlippage / _Point);   // price -> broker points
+   t.magic           = (ulong)PL("InpMagic", (long)InpMagic);
+   t.deviation       = (int)MathRound(PD("InpMaxSlippage", InpMaxSlippage) / _Point);   // price -> broker points
    t.comment         = "";
-   t.allowHedge      = InpAllowHedge;
+   t.allowHedge      = PB("InpAllowHedge", InpAllowHedge);
    t.maxPerDay       = 0;
    t.cooldownSec     = 0;
   }
@@ -400,316 +414,320 @@ void DefaultTrade(STradeSettings &t, const ENUM_EA_TRADE_MODE mode)
 void BuildConfig(SEAConfig &c)
   {
    //--- S1 Trend
-   c.trend.s.enabled            = InpT_Enable;
-   c.trend.s.tf                 = InpT_TF;
-   c.trend.s.atrLen             = InpT_AtrLen;
+   c.trend.s.enabled            = PB("InpT_Enable", InpT_Enable);
+   c.trend.s.tf                 = (ENUM_TIMEFRAMES)PL("InpT_TF", (long)InpT_TF);
+   c.trend.s.atrLen             = (int)PL("InpT_AtrLen", InpT_AtrLen);
    c.trend.s.riskPct = 0.0;
-   c.trend.s.exitOnFilteredFlip = InpT_ExitOnFlip;
+   c.trend.s.exitOnFilteredFlip = PB("InpT_ExitOnFlip", InpT_ExitOnFlip);
    c.trend.s.retryBlocked = false;
    c.trend.s.retryMins = 0;
-   DefaultTrade(c.trend.s.trade, InpT_Mode);
-   c.trend.s.trade.closeOnOpposite = InpT_CloseOpp;
-   c.trend.s.trade.slMode       = InpT_SLMode;
-   c.trend.s.trade.slAtrMult    = InpT_SLAtr;
-   c.trend.s.trade.tpMode       = InpT_TPMode;
-   c.trend.s.trade.tpAtrMult    = InpT_TPAtr;
-   c.trend.s.trade.tpRR         = InpT_TPRR;
+   DefaultTrade(c.trend.s.trade, (ENUM_EA_TRADE_MODE)PL("InpT_Mode", (long)InpT_Mode));
+   c.trend.s.trade.closeOnOpposite = PB("InpT_CloseOpp", InpT_CloseOpp);
+   c.trend.s.trade.slMode       = (ENUM_SL_MODE)PL("InpT_SLMode", (long)InpT_SLMode);
+   c.trend.s.trade.slAtrMult    = PD("InpT_SLAtr", InpT_SLAtr);
+   c.trend.s.trade.tpMode       = (ENUM_TP_MODE)PL("InpT_TPMode", (long)InpT_TPMode);
+   c.trend.s.trade.tpAtrMult    = PD("InpT_TPAtr", InpT_TPAtr);
+   c.trend.s.trade.tpRR         = PD("InpT_TPRR", InpT_TPRR);
    DefaultExits(c.trend.s.exits);
-   c.trend.s.exits.useBE         = InpT_UseBE;
-   c.trend.s.exits.beTriggerAtr  = InpT_BETrigger;
-   c.trend.s.exits.useTrail      = InpT_UseTrail;
-   c.trend.s.exits.trailStartAtr = InpT_TrailStart;
-   c.trend.s.exits.trailDistAtr  = InpT_TrailDist;
+   c.trend.s.exits.useBE         = PB("InpT_UseBE", InpT_UseBE);
+   c.trend.s.exits.beTriggerAtr  = PD("InpT_BETrigger", InpT_BETrigger);
+   c.trend.s.exits.useTrail      = PB("InpT_UseTrail", InpT_UseTrail);
+   c.trend.s.exits.trailStartAtr = PD("InpT_TrailStart", InpT_TrailStart);
+   c.trend.s.exits.trailDistAtr  = PD("InpT_TrailDist", InpT_TrailDist);
 
-   c.trend.dj.basisType  = InpT_BasisType;
-   c.trend.dj.basisLen   = InpT_BasisLen;
-   c.trend.dj.atrLen     = InpT_AtrLen;
-   c.trend.dj.sigMult    = InpT_SigMult;
-   c.trend.dj.almaOffset = InpT_AlmaOffset;
-   c.trend.dj.almaSigma  = InpT_AlmaSigma;
-   c.trend.dj.lookback   = InpT_Lookback;
-   c.trend.dj.drawBasis  = InpDrawBasis;
+   c.trend.dj.basisType  = (ENUM_BASIS_TYPE)PL("InpT_BasisType", (long)InpT_BasisType);
+   c.trend.dj.basisLen   = (int)PL("InpT_BasisLen", InpT_BasisLen);
+   c.trend.dj.atrLen     = (int)PL("InpT_AtrLen", InpT_AtrLen);
+   c.trend.dj.sigMult    = PD("InpT_SigMult", InpT_SigMult);
+   c.trend.dj.almaOffset = PD("InpT_AlmaOffset", InpT_AlmaOffset);
+   c.trend.dj.almaSigma  = PD("InpT_AlmaSigma", InpT_AlmaSigma);
+   c.trend.dj.lookback   = (int)PL("InpT_Lookback", InpT_Lookback);
+   c.trend.dj.drawBasis  = PB("InpDrawBasis", InpDrawBasis);
    c.trend.dj.basisBars  = 300;
-   c.trend.dj.upColor    = InpBuyColor;
-   c.trend.dj.downColor  = InpSellColor;
+   c.trend.dj.upColor    = (color)PL("InpBuyColor", (long)InpBuyColor);
+   c.trend.dj.downColor  = (color)PL("InpSellColor", (long)InpSellColor);
    c.trend.dj.flatColor  = clrGray;
 
-   c.trend.useHTF = InpT_UseHTF;
-   c.trend.htf    = InpT_HTF;
-   c.trend.useADX            = InpT_UseADX;
+   c.trend.useHTF = PB("InpT_UseHTF", InpT_UseHTF);
+   c.trend.htf    = (ENUM_TIMEFRAMES)PL("InpT_HTF", (long)InpT_HTF);
+   c.trend.useADX            = PB("InpT_UseADX", InpT_UseADX);
    c.trend.adx.diLen         = 14;
    c.trend.adx.adxLen        = 14;
-   c.trend.adx.minAdx        = InpT_AdxMin;
+   c.trend.adx.minAdx        = PD("InpT_AdxMin", InpT_AdxMin);
    c.trend.adx.requireDI     = false;
    c.trend.adx.requireRising = false;
-   c.trend.adx.lookback      = InpT_Lookback;
-   c.trend.useVol       = InpT_UseVol;
-   c.trend.vol.atrLen   = InpT_AtrLen;
-   c.trend.vol.avgLen   = InpT_VolAvgLen;
-   c.trend.vol.minRatio = InpT_VolMin;
-   c.trend.vol.maxRatio = InpT_VolMax;
-   c.trend.vol.lookback = InpT_Lookback;
-   c.trend.useSlope          = InpT_UseSlope;
-   c.trend.slope.maType      = InpT_BasisType;
-   c.trend.slope.maLen       = InpT_BasisLen;
+   c.trend.adx.lookback      = (int)PL("InpT_Lookback", InpT_Lookback);
+   c.trend.useVol       = PB("InpT_UseVol", InpT_UseVol);
+   c.trend.vol.atrLen   = (int)PL("InpT_AtrLen", InpT_AtrLen);
+   c.trend.vol.avgLen   = (int)PL("InpT_VolAvgLen", InpT_VolAvgLen);
+   c.trend.vol.minRatio = PD("InpT_VolMin", InpT_VolMin);
+   c.trend.vol.maxRatio = PD("InpT_VolMax", InpT_VolMax);
+   c.trend.vol.lookback = (int)PL("InpT_Lookback", InpT_Lookback);
+   c.trend.useSlope          = PB("InpT_UseSlope", InpT_UseSlope);
+   c.trend.slope.maType      = (ENUM_BASIS_TYPE)PL("InpT_BasisType", (long)InpT_BasisType);
+   c.trend.slope.maLen       = (int)PL("InpT_BasisLen", InpT_BasisLen);
    c.trend.slope.slopeBars   = 3;
-   c.trend.slope.minSlopeAtr = InpT_SlopeMin;
-   c.trend.slope.atrLen      = InpT_AtrLen;
-   c.trend.slope.almaOffset  = InpT_AlmaOffset;
-   c.trend.slope.almaSigma   = InpT_AlmaSigma;
-   c.trend.slope.lookback    = InpT_Lookback;
+   c.trend.slope.minSlopeAtr = PD("InpT_SlopeMin", InpT_SlopeMin);
+   c.trend.slope.atrLen      = (int)PL("InpT_AtrLen", InpT_AtrLen);
+   c.trend.slope.almaOffset  = PD("InpT_AlmaOffset", InpT_AlmaOffset);
+   c.trend.slope.almaSigma   = PD("InpT_AlmaSigma", InpT_AlmaSigma);
+   c.trend.slope.lookback    = (int)PL("InpT_Lookback", InpT_Lookback);
 
    //--- S2 Breakout
-   c.brk.s.enabled            = InpB_Enable;
-   c.brk.s.tf                 = InpB_TF;
-   c.brk.s.atrLen             = InpB_AtrLen;
+   c.brk.s.enabled            = PB("InpB_Enable", InpB_Enable);
+   c.brk.s.tf                 = (ENUM_TIMEFRAMES)PL("InpB_TF", (long)InpB_TF);
+   c.brk.s.atrLen             = (int)PL("InpB_AtrLen", InpB_AtrLen);
    c.brk.s.riskPct = 0.0;
    c.brk.s.exitOnFilteredFlip = false;
-   DefaultTrade(c.brk.s.trade, InpB_Mode);
+   DefaultTrade(c.brk.s.trade, (ENUM_EA_TRADE_MODE)PL("InpB_Mode", (long)InpB_Mode));
    c.brk.s.trade.closeOnOpposite = true;
    c.brk.s.trade.slMode       = SL_SIGNAL;
-   c.brk.s.trade.slAtrMult    = InpB_SLAtr;
-   c.brk.s.trade.tpMode       = InpB_TPMode;
-   c.brk.s.trade.tpRR         = InpB_TPRR;
-   c.brk.s.trade.tpAtrMult    = InpB_TPAtr;
+   c.brk.s.trade.slAtrMult    = PD("InpB_SLAtr", InpB_SLAtr);
+   c.brk.s.trade.tpMode       = (ENUM_TP_MODE)PL("InpB_TPMode", (long)InpB_TPMode);
+   c.brk.s.trade.tpRR         = PD("InpB_TPRR", InpB_TPRR);
+   c.brk.s.trade.tpAtrMult    = PD("InpB_TPAtr", InpB_TPAtr);
    DefaultExits(c.brk.s.exits);
-   c.brk.s.exits.useSessionClose = InpB_EOD;
-   c.brk.s.exits.closeHour       = InpB_EODHour;
+   c.brk.s.exits.useSessionClose = PB("InpB_EOD", InpB_EOD);
+   c.brk.s.exits.closeHour       = (int)PL("InpB_EODHour", InpB_EODHour);
    c.brk.s.exits.unitR           = true;
-   c.brk.s.exits.useBE           = InpB_UseBE;
-   c.brk.s.exits.beTriggerAtr    = InpB_BETrigger;
-   c.brk.s.exits.beLockAtr       = InpB_BELock;
-   c.brk.s.exits.usePartial      = InpB_UsePartial;
-   c.brk.s.exits.partialAtr      = InpB_PartialR;
-   c.brk.s.exits.partialPct      = InpB_PartialPct;
+   c.brk.s.exits.useBE           = PB("InpB_UseBE", InpB_UseBE);
+   c.brk.s.exits.beTriggerAtr    = PD("InpB_BETrigger", InpB_BETrigger);
+   c.brk.s.exits.beLockAtr       = PD("InpB_BELock", InpB_BELock);
+   c.brk.s.exits.usePartial      = PB("InpB_UsePartial", InpB_UsePartial);
+   c.brk.s.exits.partialAtr      = PD("InpB_PartialR", InpB_PartialR);
+   c.brk.s.exits.partialPct      = PD("InpB_PartialPct", InpB_PartialPct);
    c.brk.s.exits.partialBE       = false;
 
-   c.brk.brk.rangeStartHour = InpB_RangeStartH;
-   c.brk.brk.rangeStartMin  = InpB_RangeStartM;
-   c.brk.brk.rangeEndHour   = InpB_RangeEndH;
-   c.brk.brk.rangeEndMin    = InpB_RangeEndM;
-   c.brk.brk.tradeEndHour   = InpB_TradeEndH;
+   c.brk.brk.rangeStartHour = (int)PL("InpB_RangeStartH", InpB_RangeStartH);
+   c.brk.brk.rangeStartMin  = (int)PL("InpB_RangeStartM", InpB_RangeStartM);
+   c.brk.brk.rangeEndHour   = (int)PL("InpB_RangeEndH", InpB_RangeEndH);
+   c.brk.brk.rangeEndMin    = (int)PL("InpB_RangeEndM", InpB_RangeEndM);
+   c.brk.brk.tradeEndHour   = (int)PL("InpB_TradeEndH", InpB_TradeEndH);
    c.brk.brk.tradeEndMin    = 0;
-   c.brk.brk.bufferAtr      = InpB_BufferAtr;
-   c.brk.brk.minRangeAtr    = InpB_MinRangeAtr;
-   c.brk.brk.maxRangeAtr    = InpB_MaxRangeAtr;
-   c.brk.brk.atrLen         = InpB_AtrLen;
-   c.brk.brk.stopMode       = InpB_StopMode;
-   c.brk.brk.oneTradePerDay = InpB_OnePerDay;
-   c.brk.brk.bodyRange      = InpB_BodyRange;
+   c.brk.brk.bufferAtr      = PD("InpB_BufferAtr", InpB_BufferAtr);
+   c.brk.brk.minRangeAtr    = PD("InpB_MinRangeAtr", InpB_MinRangeAtr);
+   c.brk.brk.maxRangeAtr    = PD("InpB_MaxRangeAtr", InpB_MaxRangeAtr);
+   c.brk.brk.atrLen         = (int)PL("InpB_AtrLen", InpB_AtrLen);
+   c.brk.brk.stopMode       = (ENUM_BRK_STOP)PL("InpB_StopMode", (long)InpB_StopMode);
+   c.brk.brk.oneTradePerDay = PB("InpB_OnePerDay", InpB_OnePerDay);
+   c.brk.brk.bodyRange      = PB("InpB_BodyRange", InpB_BodyRange);
    c.brk.brk.lookback       = 400;
    c.brk.alignAsian         = false;
-   c.brk.trendLen           = InpB_TrendLen;
-   c.brk.trendTF            = InpB_TrendTF;
-   c.brk.trendType          = InpB_TrendType;
-   c.brk.s.exits.newsExitMins = InpB_NewsExit;
-   c.brk.s.retryBlocked       = InpB_RetryBlocked;
-   c.brk.s.retryMins          = InpB_RetryMins;
-   c.brk.brk.minRangeD1     = InpB_MinRangeD1;
-   c.brk.brk.maxRangeD1     = InpB_MaxRangeD1;
+   c.brk.trendLen           = (int)PL("InpB_TrendLen", InpB_TrendLen);
+   c.brk.trendTF            = (ENUM_TIMEFRAMES)PL("InpB_TrendTF", (long)InpB_TrendTF);
+   c.brk.trendType          = (ENUM_BASIS_TYPE)PL("InpB_TrendType", (long)InpB_TrendType);
+   c.brk.s.exits.newsExitMins = (int)PL("InpB_NewsExit", InpB_NewsExit);
+   c.brk.s.retryBlocked       = PB("InpB_RetryBlocked", InpB_RetryBlocked);
+   c.brk.s.retryMins          = (int)PL("InpB_RetryMins", InpB_RetryMins);
+   c.brk.brk.minRangeD1     = PD("InpB_MinRangeD1", InpB_MinRangeD1);
+   c.brk.brk.maxRangeD1     = PD("InpB_MaxRangeD1", InpB_MaxRangeD1);
 
    //--- S4 NY opening-range breakout (same module, own window)
    c.ny = c.brk;
-   c.ny.s.enabled          = InpN_Enable;
-   c.ny.s.trade.mode       = InpN_Mode;
-   c.ny.s.trade.tpRR       = InpN_TPRR;
-   c.ny.s.exits.closeHour  = InpN_EODHour;
+   c.ny.s.enabled          = PB("InpN_Enable", InpN_Enable);
+   c.ny.s.trade.mode       = (ENUM_EA_TRADE_MODE)PL("InpN_Mode", (long)InpN_Mode);
+   c.ny.s.trade.tpRR       = PD("InpN_TPRR", InpN_TPRR);
+   c.ny.s.exits.closeHour  = (int)PL("InpN_EODHour", InpN_EODHour);
    c.ny.s.exits.useBE      = false;
    c.ny.s.exits.usePartial = false;
-   int nyEnd = InpN_StartH * 60 + InpN_StartM + InpN_RangeMins;
-   c.ny.brk.rangeStartHour = InpN_StartH;
-   c.ny.brk.rangeStartMin  = InpN_StartM;
+   int nyEnd = (int)PL("InpN_StartH", InpN_StartH) * 60 + (int)PL("InpN_StartM", InpN_StartM) + (int)PL("InpN_RangeMins", InpN_RangeMins);
+   c.ny.brk.rangeStartHour = (int)PL("InpN_StartH", InpN_StartH);
+   c.ny.brk.rangeStartMin  = (int)PL("InpN_StartM", InpN_StartM);
    c.ny.brk.rangeEndHour   = nyEnd / 60;
    c.ny.brk.rangeEndMin    = nyEnd % 60;
-   c.ny.brk.tradeEndHour   = InpN_TradeEndH;
+   c.ny.brk.tradeEndHour   = (int)PL("InpN_TradeEndH", InpN_TradeEndH);
    c.ny.brk.tradeEndMin    = 0;
-   c.ny.brk.bufferAtr      = InpN_BufferAtr;
+   c.ny.brk.bufferAtr      = PD("InpN_BufferAtr", InpN_BufferAtr);
    c.ny.brk.minRangeAtr    = 0.0;
    c.ny.brk.maxRangeAtr    = 0.0;
    c.ny.brk.minRangeD1     = 0.0;
-   c.ny.brk.maxRangeD1     = InpN_MaxRangeD1;
-   c.ny.brk.stopMode       = InpN_StopMode;
+   c.ny.brk.maxRangeD1     = PD("InpN_MaxRangeD1", InpN_MaxRangeD1);
+   c.ny.brk.stopMode       = (ENUM_BRK_STOP)PL("InpN_StopMode", (long)InpN_StopMode);
    c.ny.brk.oneTradePerDay = true;
-   c.ny.alignAsian         = InpN_AlignAsian;
+   c.ny.alignAsian         = PB("InpN_AlignAsian", InpN_AlignAsian);
    c.ny.s.retryBlocked     = false;
    c.ny.trendLen           = 0;
 
    //--- S3 Pullback
-   c.pb.s.enabled            = InpP_Enable;
-   c.pb.s.tf                 = InpP_TF;
-   c.pb.s.atrLen             = InpP_AtrLen;
+   c.pb.s.enabled            = PB("InpP_Enable", InpP_Enable);
+   c.pb.s.tf                 = (ENUM_TIMEFRAMES)PL("InpP_TF", (long)InpP_TF);
+   c.pb.s.atrLen             = (int)PL("InpP_AtrLen", InpP_AtrLen);
    c.pb.s.riskPct = 0.0;
    c.pb.s.exitOnFilteredFlip = false;
    c.pb.s.retryBlocked = false;
    c.pb.s.retryMins = 0;
-   DefaultTrade(c.pb.s.trade, InpP_Mode);
+   DefaultTrade(c.pb.s.trade, (ENUM_EA_TRADE_MODE)PL("InpP_Mode", (long)InpP_Mode));
    c.pb.s.trade.closeOnOpposite = true;
    c.pb.s.trade.slMode       = SL_ATR;
-   c.pb.s.trade.slAtrMult    = InpP_SLAtr;
-   c.pb.s.trade.tpMode       = InpP_TPMode;
-   c.pb.s.trade.tpAtrMult    = InpP_TPAtr;
-   c.pb.s.trade.tpRR         = InpP_TPRR;
+   c.pb.s.trade.slAtrMult    = PD("InpP_SLAtr", InpP_SLAtr);
+   c.pb.s.trade.tpMode       = (ENUM_TP_MODE)PL("InpP_TPMode", (long)InpP_TPMode);
+   c.pb.s.trade.tpAtrMult    = PD("InpP_TPAtr", InpP_TPAtr);
+   c.pb.s.trade.tpRR         = PD("InpP_TPRR", InpP_TPRR);
    DefaultExits(c.pb.s.exits);
-   c.pb.s.exits.useTrail      = InpP_UseTrail;
-   c.pb.s.exits.trailStartAtr = InpP_TrailStart;
-   c.pb.s.exits.trailDistAtr  = InpP_TrailDist;
-   c.pb.s.exits.useTimeExit   = InpP_MaxBars > 0;
-   c.pb.s.exits.timeExitBars  = InpP_MaxBars;
+   c.pb.s.exits.useTrail      = PB("InpP_UseTrail", InpP_UseTrail);
+   c.pb.s.exits.trailStartAtr = PD("InpP_TrailStart", InpP_TrailStart);
+   c.pb.s.exits.trailDistAtr  = PD("InpP_TrailDist", InpP_TrailDist);
+   c.pb.s.exits.useTimeExit   = (int)PL("InpP_MaxBars", InpP_MaxBars) > 0;
+   c.pb.s.exits.timeExitBars  = (int)PL("InpP_MaxBars", InpP_MaxBars);
 
-   c.pb.pb.fastLen  = InpP_FastLen;
-   c.pb.pb.slowLen  = InpP_SlowLen;
-   c.pb.pb.rsiLen   = InpP_RsiLen;
-   c.pb.pb.rsiLow   = InpP_RsiLow;
-   c.pb.pb.rsiHigh  = InpP_RsiHigh;
-   c.pb.pb.atrLen   = InpP_AtrLen;
+   c.pb.pb.fastLen  = (int)PL("InpP_FastLen", InpP_FastLen);
+   c.pb.pb.slowLen  = (int)PL("InpP_SlowLen", InpP_SlowLen);
+   c.pb.pb.rsiLen   = (int)PL("InpP_RsiLen", InpP_RsiLen);
+   c.pb.pb.rsiLow   = PD("InpP_RsiLow", InpP_RsiLow);
+   c.pb.pb.rsiHigh  = PD("InpP_RsiHigh", InpP_RsiHigh);
+   c.pb.pb.atrLen   = (int)PL("InpP_AtrLen", InpP_AtrLen);
    c.pb.pb.lookback = 800;
 
    //--- S5 / S6 intraday strategies (shared intraday settings)
-   c.intra.startHour = InpI_StartH;
-   c.intra.startMin  = InpI_StartM;
-   c.intra.endHour   = InpI_EndH;
-   c.intra.endMin    = InpI_EndM;
-   c.intra.trendTF   = InpI_TrendTF;
-   c.intra.trendLen  = InpI_TrendLen;
+   c.intra.startHour = (int)PL("InpI_StartH", InpI_StartH);
+   c.intra.startMin  = (int)PL("InpI_StartM", InpI_StartM);
+   c.intra.endHour   = (int)PL("InpI_EndH", InpI_EndH);
+   c.intra.endMin    = (int)PL("InpI_EndM", InpI_EndM);
+   c.intra.trendTF   = (ENUM_TIMEFRAMES)PL("InpI_TrendTF", (long)InpI_TrendTF);
+   c.intra.trendLen  = (int)PL("InpI_TrendLen", InpI_TrendLen);
 
    SStrategyCommon ic;
    ic.enabled            = false;
-   ic.tf                 = InpI_TF;
-   ic.atrLen             = InpI_AtrLen;
+   ic.tf                 = (ENUM_TIMEFRAMES)PL("InpI_TF", (long)InpI_TF);
+   ic.atrLen             = (int)PL("InpI_AtrLen", InpI_AtrLen);
    ic.exitOnFilteredFlip = false;
    ic.retryBlocked       = false;
    ic.retryMins          = 0;
-   ic.riskPct            = InpI_RiskPct;
+   ic.riskPct            = PD("InpI_RiskPct", InpI_RiskPct);
    DefaultTrade(ic.trade, EA_TRADE_BOTH);
    ic.trade.closeOnOpposite = false;
    ic.trade.slMode       = SL_SIGNAL;
    ic.trade.slAtrMult    = 1.5;
    ic.trade.tpMode       = TP_RR;
-   ic.trade.tpRR         = InpI_TPRR;
-   ic.trade.maxPerDay    = InpI_MaxPerDay;
-   ic.trade.cooldownSec  = InpI_CooldownBars * PeriodSeconds(InpI_TF == PERIOD_CURRENT ? (ENUM_TIMEFRAMES)_Period : InpI_TF);
+   ic.trade.tpRR         = PD("InpI_TPRR", InpI_TPRR);
+   ic.trade.maxPerDay    = (int)PL("InpI_MaxPerDay", InpI_MaxPerDay);
+   ic.trade.cooldownSec  = (int)PL("InpI_CooldownBars", InpI_CooldownBars) * PeriodSeconds((ENUM_TIMEFRAMES)PL("InpI_TF", (long)InpI_TF) == PERIOD_CURRENT ? (ENUM_TIMEFRAMES)_Period : (ENUM_TIMEFRAMES)PL("InpI_TF", (long)InpI_TF));
    DefaultExits(ic.exits);
    ic.exits.unitR           = true;
-   ic.exits.useBE           = InpI_UseBE;
-   ic.exits.beTriggerAtr    = InpI_BETrigger;
+   ic.exits.useBE           = PB("InpI_UseBE", InpI_UseBE);
+   ic.exits.beTriggerAtr    = PD("InpI_BETrigger", InpI_BETrigger);
    ic.exits.beLockAtr       = 0.05;
    ic.exits.useSessionClose = true;
-   ic.exits.closeHour       = InpI_EODHour;
-   ic.exits.newsExitMins    = InpI_NewsExit;
+   ic.exits.closeHour       = (int)PL("InpI_EODHour", InpI_EODHour);
+   ic.exits.newsExitMins    = (int)PL("InpI_NewsExit", InpI_NewsExit);
 
    c.vw.s = ic;
-   c.vw.s.enabled     = InpV_Enable;
-   c.vw.vw.anchorHour = InpV_AnchorH;
+   c.vw.s.enabled     = PB("InpV_Enable", InpV_Enable);
+   c.vw.vw.anchorHour = (int)PL("InpV_AnchorH", InpV_AnchorH);
    c.vw.vw.anchorMin  = 0;
-   c.vw.vw.touchAtr   = InpV_TouchAtr;
-   c.vw.vw.slBufAtr   = InpV_SLBufAtr;
-   c.vw.vw.minSlAtr   = InpI_MinSlAtr;
-   c.vw.vw.maxSlAtr   = InpI_MaxSlAtr;
-   c.vw.vw.atrLen     = InpI_AtrLen;
+   c.vw.vw.touchAtr   = PD("InpV_TouchAtr", InpV_TouchAtr);
+   c.vw.vw.slBufAtr   = PD("InpV_SLBufAtr", InpV_SLBufAtr);
+   c.vw.vw.minSlAtr   = PD("InpI_MinSlAtr", InpI_MinSlAtr);
+   c.vw.vw.maxSlAtr   = PD("InpI_MaxSlAtr", InpI_MaxSlAtr);
+   c.vw.vw.atrLen     = (int)PL("InpI_AtrLen", InpI_AtrLen);
    c.vw.vw.lookback   = 500;
 
    c.pbo.s = ic;
-   c.pbo.s.enabled      = InpX_Enable;
-   c.pbo.pbo.fastLen    = InpX_Fast;
-   c.pbo.pbo.slowLen    = InpX_Slow;
-   c.pbo.pbo.maxPull    = InpX_MaxPull;
-   c.pbo.pbo.depthAtr   = InpX_DepthAtr;
-   c.pbo.pbo.slBufAtr   = InpX_SLBufAtr;
-   c.pbo.pbo.minSlAtr   = InpI_MinSlAtr;
-   c.pbo.pbo.maxSlAtr   = InpI_MaxSlAtr;
-   c.pbo.pbo.atrLen     = InpI_AtrLen;
+   c.pbo.s.enabled      = PB("InpX_Enable", InpX_Enable);
+   c.pbo.pbo.fastLen    = (int)PL("InpX_Fast", InpX_Fast);
+   c.pbo.pbo.slowLen    = (int)PL("InpX_Slow", InpX_Slow);
+   c.pbo.pbo.maxPull    = (int)PL("InpX_MaxPull", InpX_MaxPull);
+   c.pbo.pbo.depthAtr   = PD("InpX_DepthAtr", InpX_DepthAtr);
+   c.pbo.pbo.slBufAtr   = PD("InpX_SLBufAtr", InpX_SLBufAtr);
+   c.pbo.pbo.minSlAtr   = PD("InpI_MinSlAtr", InpI_MinSlAtr);
+   c.pbo.pbo.maxSlAtr   = PD("InpI_MaxSlAtr", InpI_MaxSlAtr);
+   c.pbo.pbo.atrLen     = (int)PL("InpI_AtrLen", InpI_AtrLen);
    c.pbo.pbo.lookback   = 400;
 
    //--- S7 / S8 scalper (shared scalper settings)
-   c.scalp.w1StartH = InpS_W1StartH;
-   c.scalp.w1StartM = InpS_W1StartM;
-   c.scalp.w1EndH   = InpS_W1EndH;
-   c.scalp.w1EndM   = InpS_W1EndM;
-   c.scalp.w2StartH = InpS_W2StartH;
-   c.scalp.w2StartM = InpS_W2StartM;
-   c.scalp.w2EndH   = InpS_W2EndH;
-   c.scalp.w2EndM   = InpS_W2EndM;
-   c.scalp.regimeTF = InpM_RegimeTF;
-   c.scalp.maxAdx   = InpM_MaxAdx;
-   c.scalp.trendTF  = InpK_TrendTF;
-   c.scalp.trendLen = InpK_TrendLen;
-   c.scalp.alignAsian = InpS_AlignAsian;
+   c.scalp.w1StartH = (int)PL("InpS_W1StartH", InpS_W1StartH);
+   c.scalp.w1StartM = (int)PL("InpS_W1StartM", InpS_W1StartM);
+   c.scalp.w1EndH   = (int)PL("InpS_W1EndH", InpS_W1EndH);
+   c.scalp.w1EndM   = (int)PL("InpS_W1EndM", InpS_W1EndM);
+   c.scalp.w2StartH = (int)PL("InpS_W2StartH", InpS_W2StartH);
+   c.scalp.w2StartM = (int)PL("InpS_W2StartM", InpS_W2StartM);
+   c.scalp.w2EndH   = (int)PL("InpS_W2EndH", InpS_W2EndH);
+   c.scalp.w2EndM   = (int)PL("InpS_W2EndM", InpS_W2EndM);
+   c.scalp.regimeTF = (ENUM_TIMEFRAMES)PL("InpM_RegimeTF", (long)InpM_RegimeTF);
+   c.scalp.maxAdx   = PD("InpM_MaxAdx", InpM_MaxAdx);
+   c.scalp.trendTF  = (ENUM_TIMEFRAMES)PL("InpK_TrendTF", (long)InpK_TrendTF);
+   c.scalp.trendLen = (int)PL("InpK_TrendLen", InpK_TrendLen);
+   c.scalp.alignAsian = PB("InpS_AlignAsian", InpS_AlignAsian);
 
    SStrategyCommon sc = ic;
-   sc.tf                  = InpS_TF;
-   sc.atrLen              = InpS_AtrLen;
-   sc.riskPct             = InpS_RiskPct;
-   sc.trade.maxPerDay     = InpS_MaxPerDay;
-   sc.trade.cooldownSec   = InpS_CooldownBars * PeriodSeconds(InpS_TF == PERIOD_CURRENT ? (ENUM_TIMEFRAMES)_Period : InpS_TF);
+   sc.tf                  = (ENUM_TIMEFRAMES)PL("InpS_TF", (long)InpS_TF);
+   sc.atrLen              = (int)PL("InpS_AtrLen", InpS_AtrLen);
+   sc.riskPct             = PD("InpS_RiskPct", InpS_RiskPct);
+   sc.trade.maxPerDay     = (int)PL("InpS_MaxPerDay", InpS_MaxPerDay);
+   sc.trade.cooldownSec   = (int)PL("InpS_CooldownBars", InpS_CooldownBars) * PeriodSeconds((ENUM_TIMEFRAMES)PL("InpS_TF", (long)InpS_TF) == PERIOD_CURRENT ? (ENUM_TIMEFRAMES)_Period : (ENUM_TIMEFRAMES)PL("InpS_TF", (long)InpS_TF));
    DefaultExits(sc.exits);
    sc.exits.unitR           = true;
-   sc.exits.useBE           = InpS_UseBE;
-   sc.exits.beTriggerAtr    = InpS_BETrigger;
+   sc.exits.useBE           = PB("InpS_UseBE", InpS_UseBE);
+   sc.exits.beTriggerAtr    = PD("InpS_BETrigger", InpS_BETrigger);
    sc.exits.beLockAtr       = 0.05;
-   sc.exits.useTimeExit     = InpS_MaxBars > 0;
-   sc.exits.timeExitBars    = InpS_MaxBars;
+   sc.exits.useTimeExit     = (int)PL("InpS_MaxBars", InpS_MaxBars) > 0;
+   sc.exits.timeExitBars    = (int)PL("InpS_MaxBars", InpS_MaxBars);
    sc.exits.useSessionClose = true;
-   sc.exits.closeHour       = InpS_EODHour;
-   sc.exits.newsExitMins    = InpS_NewsExit;
+   sc.exits.closeHour       = (int)PL("InpS_EODHour", InpS_EODHour);
+   sc.exits.newsExitMins    = (int)PL("InpS_NewsExit", InpS_NewsExit);
 
    c.mr.s = sc;
-   c.mr.s.enabled       = InpM_Enable;
+   c.mr.s.enabled       = PB("InpM_Enable", InpM_Enable);
    c.mr.s.trade.tpMode  = TP_RR;          // fallback only - the signal's own target (middle band) is used
    c.mr.s.trade.tpRR    = 1.0;
-   c.mr.mr.bbLen        = InpM_BBLen;
-   c.mr.mr.bbDev        = InpM_BBDev;
-   c.mr.mr.rsiLen       = InpM_RSILen;
-   c.mr.mr.rsiLow       = InpM_RSILow;
-   c.mr.mr.rsiHigh      = InpM_RSIHigh;
-   c.mr.mr.slBufAtr     = InpM_SLBufAtr;
-   c.mr.mr.maxSlAtr     = InpM_MaxSlAtr;
-   c.mr.mr.minTpAtr     = InpM_MinTpAtr;
-   c.mr.mr.atrLen       = InpS_AtrLen;
+   c.mr.mr.bbLen        = (int)PL("InpM_BBLen", InpM_BBLen);
+   c.mr.mr.bbDev        = PD("InpM_BBDev", InpM_BBDev);
+   c.mr.mr.rsiLen       = (int)PL("InpM_RSILen", InpM_RSILen);
+   c.mr.mr.rsiLow       = PD("InpM_RSILow", InpM_RSILow);
+   c.mr.mr.rsiHigh      = PD("InpM_RSIHigh", InpM_RSIHigh);
+   c.mr.mr.slBufAtr     = PD("InpM_SLBufAtr", InpM_SLBufAtr);
+   c.mr.mr.maxSlAtr     = PD("InpM_MaxSlAtr", InpM_MaxSlAtr);
+   c.mr.mr.minTpAtr     = PD("InpM_MinTpAtr", InpM_MinTpAtr);
+   c.mr.mr.atrLen       = (int)PL("InpS_AtrLen", InpS_AtrLen);
    c.mr.mr.lookback     = 300;
 
    c.mo.s = sc;
-   c.mo.s.enabled       = InpK_Enable;
+   c.mo.s.enabled       = PB("InpK_Enable", InpK_Enable);
    c.mo.s.trade.tpMode  = TP_RR;
-   c.mo.s.trade.tpRR    = InpK_TPRR;
-   c.mo.mo.bodyAtr      = InpK_BodyAtr;
-   c.mo.mo.closePct     = InpK_ClosePct;
-   c.mo.mo.stopMode     = InpK_StopMode;
+   c.mo.s.trade.tpRR    = PD("InpK_TPRR", InpK_TPRR);
+   c.mo.mo.bodyAtr      = PD("InpK_BodyAtr", InpK_BodyAtr);
+   c.mo.mo.closePct     = PD("InpK_ClosePct", InpK_ClosePct);
+   c.mo.mo.stopMode     = (ENUM_IMPULSE_STOP)PL("InpK_StopMode", (long)InpK_StopMode);
    c.mo.mo.slBufAtr     = 0.1;
    c.mo.mo.minSlAtr     = 0.5;
    c.mo.mo.maxSlAtr     = 2.5;
-   c.mo.mo.atrLen       = InpS_AtrLen;
+   c.mo.mo.atrLen       = (int)PL("InpS_AtrLen", InpS_AtrLen);
    c.mo.mo.lookback     = 200;
 
    //--- sizing
-   c.risk.lotMode     = InpLotMode;
-   c.risk.fixedLots   = InpFixedLots;
-   c.risk.riskPercent = InpRiskPercent;
-   c.risk.accountSize = InpAccountSize;
-   c.weekendClose     = InpWeekendClose;
-   c.weekendHour      = InpWeekendHour;
+   c.risk.lotMode     = (ENUM_LOT_MODE)PL("InpLotMode", (long)InpLotMode);
+   c.risk.fixedLots   = PD("InpFixedLots", InpFixedLots);
+   c.risk.riskPercent = PD("InpRiskPercent", InpRiskPercent);
+   c.risk.accountSize = PD("InpAccountSize", InpAccountSize);
+   c.weekendClose     = PB("InpWeekendClose", InpWeekendClose);
+   c.weekendHour      = (int)PL("InpWeekendHour", InpWeekendHour);
 
    //--- guards
-   c.useSession          = InpUseSession;
-   c.session.startHour   = InpSessStartH;
+   c.useSession          = PB("InpUseSession", InpUseSession);
+   c.session.startHour   = (int)PL("InpSessStartH", InpSessStartH);
    c.session.startMinute = 0;
-   c.session.endHour     = InpSessEndH;
+   c.session.endHour     = (int)PL("InpSessEndH", InpSessEndH);
    c.session.endMinute   = 0;
    for(int d = 0; d < 7; d++)
-      c.session.days[d] = (d >= 1 && d <= 4) || (d == 5 && InpTradeFri);
-   c.maxSpread = InpMaxSpread;
-   c.useDaily              = InpUseDaily;
-   c.daily.maxLossPct      = InpDailyMaxLoss;
-   c.daily.profitTargetPct = InpDailyTargetPct;
-   c.daily.maxTrades       = InpDailyMaxTrades;
+      c.session.days[d] = (d >= 1 && d <= 4) || (d == 5 && PB("InpTradeFri", InpTradeFri));
+   c.maxSpread = PD("InpMaxSpread", InpMaxSpread);
+   c.spreadAtrPct = PD("InpSpreadAtrPct", InpSpreadAtrPct);
+   c.useActivity  = PB("InpUseActivity", InpUseActivity);
+   c.activityMin  = PD("InpActivityMin", InpActivityMin);
+   c.activityDays = (int)PL("InpActivityDays", InpActivityDays);
+   c.useDaily              = PB("InpUseDaily", InpUseDaily);
+   c.daily.maxLossPct      = PD("InpDailyMaxLoss", InpDailyMaxLoss);
+   c.daily.profitTargetPct = PD("InpDailyTargetPct", InpDailyTargetPct);
+   c.daily.maxTrades       = (int)PL("InpDailyMaxTrades", InpDailyMaxTrades);
    c.daily.closeOnLimit    = true;
-   c.daily.profitTargetMoney = InpDailyTargetUSD;
-   c.daily.maxLossMoney      = InpDailyMaxLossUSD;
-   c.useNews            = InpUseNews;
-   c.news.currencies    = InpNewsCurrencies;
-   c.news.minImportance = InpNewsImportance;
-   c.news.minutesBefore = InpNewsBefore;
-   c.news.minutesAfter  = InpNewsAfter;
-   c.news.exclude       = InpNewsExclude;
+   c.daily.profitTargetMoney = PD("InpDailyTargetUSD", InpDailyTargetUSD);
+   c.daily.maxLossMoney      = PD("InpDailyMaxLossUSD", InpDailyMaxLossUSD);
+   c.useNews            = PB("InpUseNews", InpUseNews);
+   c.news.currencies    = PS("InpNewsCurrencies", InpNewsCurrencies);
+   c.news.minImportance = (int)PL("InpNewsImportance", InpNewsImportance);
+   c.news.minutesBefore = (int)PL("InpNewsBefore", InpNewsBefore);
+   c.news.minutesAfter  = (int)PL("InpNewsAfter", InpNewsAfter);
+   c.news.exclude       = PS("InpNewsExclude", InpNewsExclude);
   }
 
 //+------------------------------------------------------------------+
@@ -984,11 +1002,17 @@ bool RegisterGuards(const SEAConfig &c)
       g.Configure(c.session);
       g_eng.guards.Add(g);
      }
-   if(c.maxSpread > 0.0)
+   if(c.maxSpread > 0.0 || c.spreadAtrPct > 0.0)
      {
       CGuardSpread *g = new CGuardSpread();
-      // chart symbol: the input as is; other symbols: the same % of price unless overridden
-      g.Configure(c.maxSpread, g_eng.spec.spread >= 0.0 ? "" : _Symbol);
+      // % of daily ATR if set; else chart symbol: the input as is, other symbols: the same % of price unless overridden
+      g.Configure(c.maxSpread, g_eng.spec.spread >= 0.0 ? "" : _Symbol, c.spreadAtrPct);
+      g_eng.guards.Add(g);
+     }
+   if(c.useActivity)
+     {
+      CGuardActivity *g = new CGuardActivity();
+      g.Configure(c.activityMin, c.activityDays);
       g_eng.guards.Add(g);
      }
    if(c.useDaily)
@@ -1048,6 +1072,21 @@ bool BuildEngine(const SSymbolSpec &spec)
    e.symbol  = spec.name;
    e.isChart = (spec.name == _Symbol);
    e.cfg     = g_cfg;
+   CProfile prof;
+   if(InpUseProfiles && prof.Load(e.symbol))
+     {
+      // the profile's values replace the inputs for this pair only
+      g_prof = GetPointer(prof);
+      BuildConfig(e.cfg);
+      ApplyPreset((ENUM_EA_PRESET)PL("InpPreset", (long)InpPreset), e.cfg);
+      if(e.spec.spread < 0.0 && prof.Has("InpMaxSpread"))
+         e.spec.spread = e.cfg.maxSpread;                // the pair's own absolute limits
+      if(e.spec.slip < 0.0 && prof.Has("InpMaxSlippage"))
+         e.spec.slip = PD("InpMaxSlippage", InpMaxSlippage);
+      g_prof = NULL;
+      e.profile = StringFormat("%s (%d values)", prof.File(), prof.Count());
+      PrintFormat("%s: profile %s -> %s", e.symbol, e.profile, ConfigSummary(e.cfg));
+     }
    ApplySymbol(e);
    int n = ArraySize(g_engines);
    ArrayResize(g_engines, n + 1);
@@ -1187,8 +1226,15 @@ void CheckHealth(string &txt[], color &clr[])
      {
       string sym = g_engines[e].symbol;
       StringToUpper(sym);
-      if(StringFind(sym, "XAU") < 0 && StringFind(sym, "GOLD") < 0)
-         AddHealth(txt, clr, HEALTH_WARN, g_engines[e].symbol + ": settings were tuned on XAUUSD - optimise this pair first");
+      if(g_engines[e].profile != "")
+         AddHealth(txt, clr, HEALTH_OK, g_engines[e].symbol + ": profile " + g_engines[e].profile);
+      else
+        {
+         if(InpUseProfiles)
+            AddHealth(txt, clr, HEALTH_WARN, g_engines[e].symbol + ": no profile (" + PROFILE_DIR + g_engines[e].symbol + ".set) - using the inputs");
+         if(StringFind(sym, "XAU") < 0 && StringFind(sym, "GOLD") < 0)
+            AddHealth(txt, clr, HEALTH_WARN, g_engines[e].symbol + ": settings were tuned on XAUUSD - optimise this pair first");
+        }
      }
    if(_Period != PERIOD_M1)
       AddHealth(txt, clr, HEALTH_WARN, "Chart is " + TfName((ENUM_TIMEFRAMES)_Period) + " - EA is tuned for M1");
@@ -1252,7 +1298,10 @@ void CheckHealth(string &txt[], color &clr[])
                                                   (InpAllowHedge ? "hedging allowed" : "no hedging") +
                                                   (multi ? StringFormat(", %d symbols", ArraySize(g_engines)) : "")));
      }
-   if(ArraySize(txt) == 1 && clr[0] == HEALTH_OK)
+   bool allOk = ArraySize(txt) > 0;
+   for(int i = 0; i < ArraySize(txt); i++)
+      allOk = allOk && clr[i] == HEALTH_OK;
+   if(allOk)
       txt[0] = "All checks OK. " + txt[0];
   }
 

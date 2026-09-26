@@ -710,3 +710,10 @@ Spread/slippage scale by price from the chart symbol unless overridden; news `AU
 results: symbol column "A+B", strategies/trades per symbol. Regression: single-symbol runs must match v4.31.
 Round 24 sets: Round24_PairScan (Top1 settings × 10 pairs, slow complete), Round24_PairOptimize (Round 20 ranges
 × 10 pairs, genetic), Multi_Gold_Silver_Top1 (portfolio example).
+
+## v4.50 – per-pair adaptation
+Already scale-free: every SL/TP/buffer/BE/trail is ATR- or R-based; sizing uses tick value.
+New: InpSpreadAtrPct (spread limit = % of the pair's D1 ATR), GuardActivity (per-pair active hours from the
+hourly tick-volume profile, InpUseActivity/Min/Days), per-pair profiles (Common\Files\ClaudeEA\profiles\
+<SYMBOL>.set, any input; all BuildConfig reads go through PD/PL/PB/PS accessors). make_set.py --profile.
+Round25_PairAdapt: Top1 settings × 10 pairs × spread-ATR 0–3% × activity off/on 0.6–1.4 (slow complete, 400 passes).

@@ -6,6 +6,7 @@ guarantees each test runs exactly the code defaults plus the optimisation ranges
 
 Usage:  python make_set.py <round-name> [NAME=start:step:stop ...]
         e.g. python make_set.py Round1 InpPreset=1:1:9
+        --exact-name  save as <round-name>.set;  --profile  also install as per-pair profile <round-name>.set
 Writes: MQL5/Profiles/Tester/Claude_<round-name>.set  (Inputs tab -> right-click -> Load)
         Research/sets/Claude_<round-name>.set          (copy kept in the repo)
 """
@@ -73,7 +74,8 @@ def main():
         sys.exit(1)
     args = sys.argv[1:]
     exact = "--exact-name" in args          # save as <name>.set instead of Claude_<name>.set
-    args = [a for a in args if a != "--exact-name"]
+    profile = "--profile" in args           # also install as a per-pair profile: Common/Files/ClaudeEA/profiles/<name>.set
+    args = [a for a in args if a not in ("--exact-name", "--profile")]
     name = args[0]
     ranges = {}      # NAME=start:step:stop -> optimised
     fixed = {}       # NAME=value           -> overrides the code default
@@ -111,6 +113,8 @@ def main():
     content = "\r\n".join(lines) + "\r\n"
     fname = f"{name}.set" if exact else f"Claude_{name}.set"
     targets = [MQL5_DIR / "Profiles" / "Tester" / fname, HERE / "sets" / fname]
+    if profile:                              # name must be the broker symbol, e.g. EURUSD
+        targets.append(MQL5_DIR.parent.parent / "Common" / "Files" / "ClaudeEA" / "profiles" / f"{name}.set")
     for t in targets:
         t.parent.mkdir(parents=True, exist_ok=True)
         t.write_bytes(b"\xff\xfe" + content.encode("utf-16-le"))   # UTF-16 LE with BOM, as MT5 writes

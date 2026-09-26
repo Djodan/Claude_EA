@@ -165,6 +165,10 @@ struct SEAConfig
    bool              useSession;
    SGuardSessionSettings session;
    double            maxSpread;            // price distance, e.g. 0.60 on XAUUSD (0 = off)
+   double            spreadAtrPct;         // > 0: max spread = % of the pair's daily ATR
+   bool              useActivity;          // per-pair active hours from tick volume
+   double            activityMin;
+   int               activityDays;
    bool              useDaily;
    SGuardDailySettings daily;
    bool              useNews;
@@ -310,8 +314,12 @@ string ConfigSummary(const SEAConfig &c)
       s += StringFormat(" DAILY+%.0f/-%.0f", c.daily.profitTargetMoney, c.daily.maxLossMoney) +
            (c.daily.profitTargetPct > 0.0 ? StringFormat(" +%.1f%%", c.daily.profitTargetPct) : "") +
            (c.daily.maxLossPct > 0.0 ? StringFormat(" -%.1f%%", c.daily.maxLossPct) : "");
-   if(c.maxSpread > 0.0)
+   if(c.spreadAtrPct > 0.0)
+      s += StringFormat(" SPR%.1f%%ATR", c.spreadAtrPct);
+   else if(c.maxSpread > 0.0)
       s += StringFormat(" SPR%.2f", c.maxSpread);
+   if(c.useActivity)
+      s += StringFormat(" ACT%.2f", c.activityMin);
    return s;
   }
 

@@ -21,6 +21,7 @@ public:
    SSymbolSpec       spec;
    string            symbol;
    bool              isChart;      // the chart's symbol: draws signals on the chart
+   string            profile;      // loaded per-pair profile ("" = inputs)
    SEAConfig         cfg;
    CGuardManager     guards;
    CGuardNews       *news;         // owned by guards; kept for health checks
@@ -28,7 +29,7 @@ public:
    CExcursionTracker excursions;
    CAlertManager     alerts;
 
-                     CSymbolEngine(void) : symbol(""), isChart(false), news(NULL) {}
+                     CSymbolEngine(void) : symbol(""), isChart(false), profile(""), news(NULL) {}
 
    int               Total(void) const { return ArraySize(strategies); }
 

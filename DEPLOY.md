@@ -39,3 +39,15 @@
 - News `AUTO` = each symbol's own currencies. Daily limits are account-wide (all symbols together).
 - Tester: optimise `Symbol slot` 1..N to run each pair of the list separately; slot 0 = whole portfolio.
 - Each symbol risks its own % per trade - N symbols can have N trades open at once.
+
+## Per-pair adaptation (v4.50)
+Automatic (no per-pair settings needed):
+- Stops, targets, buffers, BE/trail are ATR or R multiples -> already scale with each pair's range.
+- Lot size = risk % / (stop distance x tick value) -> correct contract size per pair.
+- `Max spread % of D1 ATR` (InpSpreadAtrPct): spread limit relative to the pair's own daily range.
+- `Activity filter` (InpUseActivity): trades only in each pair's own busy hours, from its hourly tick volume.
+Per-pair profiles (InpUseProfiles = true):
+- Optimise a pair (Symbol slot), right-click the best pass -> Save as `<SYMBOL>.set`
+  (or `python Research/make_set.py EURUSD --exact-name --profile ...`).
+- Put it in `%APPDATA%\MetaQuotes\Terminal\Common\Files\ClaudeEA\profiles\`. Any input in it replaces the EA
+  input for that pair only; pairs without a profile use the EA inputs. The dashboard shows which profile loaded.
