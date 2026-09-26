@@ -804,3 +804,8 @@ chart ($100k, 0.5% risk fixed during optimisation, daily limits off, news AUTO),
 Spread/slippage limits: JPY 0.03, EURGBP/GBPUSD 0.0003 (3 pips). BITCOIN: local tick data is thin (tester must download
 2026) – if it fails, swap to USDCAD (oil-driven) or NZDJPY. After the runs: correlation of the ideas' DAILY P/L (from the
 trades CSVs), keep the pairs with low correlation and PF ≥ 1.3 on 2026 and 2025.
+**GBPUSD removed from Round 30.** The run was a single test on code defaults (B TF = chart M1, TP 2R, $1k deposit), not the
+optimisation: 161 trades, +$31, PF 1.10, win 44.7%, max loss 0.51% – no edge. Removed anyway for the prop rule: its London
+breakout fires in the same window as gold's Asian breakout (same idea, both USD-quoted), so gold S2 0.45% / scalper 0.7% +
+GBPUSD ≥ 0.5% open together could exceed 1% on one trade idea. Portfolio now: XAUUSD, USDJPY, EURGBP, BITCOIN.
+Open point: USDJPY and gold are both USD bets (long gold ≈ short USDJPY) → a combined open-risk cap is needed (v4.53 idea).
