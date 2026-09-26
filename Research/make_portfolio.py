@@ -6,7 +6,8 @@ Usage:  python make_portfolio.py <Name> --base <set> PAIR [PAIR ...] [InpX=value
          SYMBOL=<set>;srisk=5    ...plus extra key=value items (short keys spread/slip/risk/srisk/irisk or any input)
          append @off             pair is in the set but switched off (e.g. GBPUSD=GBP_best@off)
   InpX=value                     overrides a base (chart) input
-  --chunk N                      max characters per settings input (default 250; 4 inputs per pair)
+  --chunk N                      max characters per settings input (default 240; 4 inputs per pair).
+                                 MT5 cuts a string input at 255 chars INCLUDING "InpPairN_SK=" -> max 243
 <set> = a path, or a name in Research/sets or MQL5/Profiles/Tester (with or without .set / Claude_ prefix).
 Writes <Name>.set to MQL5/Profiles/Tester and Research/sets via make_set.py.
 e.g. python make_portfolio.py New_1k_Portfolio --base New_1k_1 XAUUSD GBPUSD=GBP_1k_best;srisk=5
@@ -79,10 +80,10 @@ def main():
     args = sys.argv[1:]
     if len(args) < 3 or "--base" not in args:
         sys.exit(__doc__)
-    size = 250
+    size = 240
     if "--chunk" in args:
         i = args.index("--chunk")
-        size = int(args[i + 1])
+        size = min(int(args[i + 1]), 243)
         del args[i:i + 2]
     i = args.index("--base")
     base_name = args[i + 1]

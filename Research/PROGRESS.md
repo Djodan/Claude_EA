@@ -777,3 +777,6 @@ each pair's winning set (writes only the inputs that differ, compacted, ≤ 250 
 settings per pair).
 - **Round29_PairsCheck** (regression): base New_Prop_High_Risk, pair 1 XAUUSD = New_1k_1 via 70 pair settings.
   Run XAUUSD M1, $1k, real ticks → must reproduce **$13,216.98**.
+- First Round29_PairsCheck run was on a **$100k** deposit (not $1k) → +1,307, not comparable. It did show that MT5 cuts a
+  string input at **255 chars incl. "InpPairN_SK="** (243 left): 2 items were cut (`P_TPMo`, `I_Max`) and the health check
+  caught them. Fix: make_portfolio.py chunks at 240, EA warns on any settings field ≥ 243 chars. Set regenerated.

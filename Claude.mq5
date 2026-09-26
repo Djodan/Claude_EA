@@ -1507,6 +1507,14 @@ int OnInit()
       usePairs = usePairs || pOn[i];
    bool listed = usePairs ? CSymbolList::ParsePairs(pOn, pSym, pSet, InpSymbolSlot, specs, g_symbolIssue)
                           : CSymbolList::Parse(InpSymbols, InpSymbolSlot, specs, g_symbolIssue);
+   // MT5 cuts a string input at 255 chars including "InpPairN_SK=" (243 left): a full field may have lost its end
+   string pAll[] = {InpPair1_S1, InpPair1_S2, InpPair1_S3, InpPair1_S4, InpPair2_S1, InpPair2_S2, InpPair2_S3, InpPair2_S4,
+                    InpPair3_S1, InpPair3_S2, InpPair3_S3, InpPair3_S4, InpPair4_S1, InpPair4_S2, InpPair4_S3, InpPair4_S4,
+                    InpPair5_S1, InpPair5_S2, InpPair5_S3, InpPair5_S4};
+   for(int i = 0; i < ArraySize(pAll); i++)
+      if(pOn[i / 4] && StringLen(pAll[i]) >= 243)
+         g_symbolIssue += StringFormat("Pair %d settings %d is %d chars - probably cut off by MT5 (max 243), split it; ",
+                                       i / 4 + 1, i % 4 + 1, StringLen(pAll[i]));
    if(usePairs && StringLen(InpSymbols) > 0)
       g_symbolIssue += "'Symbols' is ignored while Pair inputs are on; ";
    if(!listed)

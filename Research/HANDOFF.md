@@ -79,7 +79,7 @@ CStrategy     = signal modules (1 TRIGGER + FILTERs) + CTradeManager + CRiskMana
   text `key=value;...` (only what differs from the chart inputs; short keys too). Any pair on → replaces `InpSymbols`;
   text beats a profile file; unknown keys show red on the health. Build with
   `python Research/make_portfolio.py <Name> --base <set> XAUUSD GBPUSD=<gbp set>[;srisk=5][@off] [InpX=v ...]`.
-  Daily limits are account-wide: give every pair the same daily settings. Risks add up across pairs.
+  MT5 cuts string inputs at 255 chars incl. the name (243 value) → chunks of 240. Daily limits are account-wide: give every pair the same daily settings. Risks add up across pairs.
 - Everything else is scale-free (ATR/R-based). Settings are tuned on XAUUSD only – other pairs untested.
 
 ## 4. Creating sets – `Research/make_set.py`
