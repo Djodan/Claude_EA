@@ -38,7 +38,7 @@ public:
       for(int i = 0; i < total; i++)
         {
          ulong d = HistoryDealGetTicket(i);
-         if(d == 0 || HistoryDealGetString(d, DEAL_SYMBOL) != symbol || HistoryDealGetInteger(d, DEAL_ENTRY) != DEAL_ENTRY_IN)
+         if(d == 0 || (symbol != "" && HistoryDealGetString(d, DEAL_SYMBOL) != symbol) || HistoryDealGetInteger(d, DEAL_ENTRY) != DEAL_ENTRY_IN)
             continue;
          ulong mg = (ulong)HistoryDealGetInteger(d, DEAL_MAGIC);
          if(mg < baseMagic || mg >= baseMagic + 100)
@@ -57,7 +57,7 @@ public:
       for(int i = 0; i < total; i++)
         {
          ulong d = HistoryDealGetTicket(i);
-         if(d == 0 || HistoryDealGetString(d, DEAL_SYMBOL) != symbol)
+         if(d == 0 || (symbol != "" && HistoryDealGetString(d, DEAL_SYMBOL) != symbol))
             continue;
          long entry = HistoryDealGetInteger(d, DEAL_ENTRY);
          if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_OUT_BY && entry != DEAL_ENTRY_INOUT)

@@ -30,3 +30,12 @@
 - Spread limit and slippage are prices ($0.60 / $0.50 on gold) – same meaning on 2- and 3-digit brokers.
 - Risk uses the broker's own tick value (`OrderCalcProfit`), so contract size differences are handled.
 - A trade whose correct size is below the broker's minimum lot is skipped (never rounded up).
+
+## Multiple symbols (v4.40)
+- Attach to ONE chart (XAUUSD M1 recommended). `Symbols` = comma list, e.g. `XAUUSD,XAGUSD,EURUSD`; empty = chart symbol.
+- Broker suffixes resolve automatically (`EURUSD` -> `EURUSD.a`).
+- Per-symbol overrides: `EURUSD:spread=0.0002;slip=0.0003;risk=0.5;srisk=0.3;irisk=0.3`.
+  Without overrides, spread/slippage inputs (set for the chart symbol) scale by price to the other symbols.
+- News `AUTO` = each symbol's own currencies. Daily limits are account-wide (all symbols together).
+- Tester: optimise `Symbol slot` 1..N to run each pair of the list separately; slot 0 = whole portfolio.
+- Each symbol risks its own % per trade - N symbols can have N trades open at once.

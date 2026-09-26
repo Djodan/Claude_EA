@@ -37,10 +37,10 @@ private:
    double            m_floatPnl;
    int               m_trades;
 
-   //--- any strategy of this EA: magic in [base, base + 100)
+   //--- any strategy of this EA on any symbol: magic in [base, base + 100) - limits are account-wide
    bool              IsOurs(const string symbol, const long magic) const
      {
-      return symbol == m_symbol && (ulong)magic >= m_magic && (ulong)magic < m_magic + 100;
+      return (ulong)magic >= m_magic && (ulong)magic < m_magic + 100;
      }
 
    void              Refresh(void)

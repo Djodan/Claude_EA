@@ -201,6 +201,7 @@ public:
      {
       if(!HistorySelect(0, TimeCurrent() + 86400))
          return;
+      int dg = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
       FolderCreate("ClaudeEA", FILE_COMMON);
       MqlDateTime f;
       TimeToStruct(from, f);
@@ -272,13 +273,13 @@ public:
             tracker.Get(pid, mfe, mae, risk);
          double moved = inType[k] == DEAL_TYPE_BUY ? outPrice - inPrice[k] : inPrice[k] - outPrice;
          FileWrite(h, inMagic[k], (long)pid, inType[k] == DEAL_TYPE_BUY ? "BUY" : "SELL",
-                   TimeToString(inTime[k], TIME_DATE | TIME_MINUTES), DoubleToString(inPrice[k], _Digits),
+                   TimeToString(inTime[k], TIME_DATE | TIME_MINUTES), DoubleToString(inPrice[k], dg),
                    TimeToString(outTime, TIME_DATE | TIME_MINUTES),
-                   DoubleToString(HistoryDealGetDouble(d, DEAL_PRICE), _Digits),
+                   DoubleToString(HistoryDealGetDouble(d, DEAL_PRICE), dg),
                    DoubleToString(HistoryDealGetDouble(d, DEAL_VOLUME), 2),
                    DoubleToString(net, 2), Reason(HistoryDealGetInteger(d, DEAL_REASON)),
                    (int)((outTime - inTime[k]) / PeriodSeconds(tf)), dt.hour, dt.day_of_week,
-                   DoubleToString(risk, _Digits), DoubleToString(mfe, _Digits), DoubleToString(mae, _Digits),
+                   DoubleToString(risk, dg), DoubleToString(mfe, dg), DoubleToString(mae, dg),
                    risk > 0.0 ? DoubleToString(mfe / risk, 2) : "", risk > 0.0 ? DoubleToString(mae / risk, 2) : "",
                    risk > 0.0 ? DoubleToString(moved / risk, 2) : "");
         }

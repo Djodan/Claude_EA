@@ -124,6 +124,10 @@ public:
    virtual bool      Init(const string symbol, const ulong magic)
      {
       CGuard::Init(symbol, magic);
+      string cur = m_cfg.currencies;
+      StringToUpper(cur);
+      if(cur == "" || cur == "AUTO")
+         m_cfg.currencies = SymbolInfoString(symbol, SYMBOL_CURRENCY_BASE) + "," + SymbolInfoString(symbol, SYMBOL_CURRENCY_PROFIT);
       if(!Load())
          PrintFormat("%s: %s not found - run the EA once on a live chart to export the calendar. Guard inactive.",
                      m_name, CALENDAR_FILE);

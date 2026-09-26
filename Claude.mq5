@@ -28,9 +28,12 @@
 //|  Session times are in reference time (GMT+2/+3, US DST) and are |
 //|  converted from the broker's timezone (input), see TimeZone.mqh. |
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
+//|  Multi-symbol: "Symbols" input -> one CSymbolEngine per symbol  |
+//|  (own guards, strategies, overrides); daily limits are account- |
+//|  wide. "Symbol slot" lets the optimiser run the pairs one by one.|
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.31"
+#define EA_VERSION "4.40"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -45,6 +48,8 @@
 #include "Modules/Core/ExcursionTracker.mqh"
 #include "Modules/Core/DailyStats.mqh"
 #include "Modules/Strategy/Strategy.mqh"
+#include "Modules/Strategy/SymbolEngine.mqh"
+#include "Modules/Core/SymbolList.mqh"
 #include "Modules/Signals/SignalDJTrend.mqh"
 #include "Modules/Signals/SignalSessionBreakout.mqh"
 #include "Modules/Signals/SignalTrendPullback.mqh"
@@ -96,6 +101,10 @@ input bool               InpAllowHedge    = false;          // Allow opposite po
 input bool               InpWeekendClose  = true;           // Close all positions before the weekend (Monday gaps break the 1% rule)
 input int                InpWeekendHour   = 22;             // Friday close hour (ref GMT+2/+3; also 5 min before broker Friday end)
 input double             InpAccountSize   = 100000;         // Account size cap for risk (prop size, 0 = off)
+
+input group "=== Symbols (multi-pair) ==="
+input string             InpSymbols       = "";             // Symbols, comma-separated ("" = chart symbol). Overrides: EURUSD:spread=0.0002;slip=0.0003;risk=0.5;srisk=0.3
+input int                InpSymbolSlot    = 0;              // Trade only the Nth symbol of the list (0 = all) - optimise 1..N to test pairs one by one
 
 input group "=== S1 Trend: DJ Trend flip ==="
 input bool               InpT_Enable      = true;           // Enable
@@ -272,7 +281,7 @@ input double             InpX_SLBufAtr    = 0.1;            // S6 stop buffer (A
 
 input group "=== Guard: News ==="
 input bool               InpUseNews       = true;           // Block entries around news
-input string             InpNewsCurrencies= "USD";          // Currencies
+input string             InpNewsCurrencies= "AUTO";          // Currencies ("AUTO" = each symbol\'s own, e.g. EURUSD -> EUR,USD)
 input int                InpNewsImportance= 3;              // Min importance (1 low - 3 high)
 input int                InpNewsBefore    = 30;             // Minutes before event
 input int                InpNewsAfter     = 30;             // Minutes after event
@@ -313,19 +322,34 @@ input bool               InpReportResults = true;           // Write results CSV
 input bool               InpExportTrades  = true;           // Export trade list (single runs)
 
 //--- Globals --------------------------------------------------------
-SEAConfig        g_cfg;
-CStrategy       *g_strategies[];
-CGuardManager    g_guards;
-CAlertManager    g_alerts;
+SEAConfig        g_cfg;                 // inputs + preset; each engine holds a copy with its symbol overrides
+CSymbolEngine   *g_engines[];           // one engine per traded symbol
+CSymbolEngine   *g_eng = NULL;          // engine being built (used by the Build* functions)
+string           g_symbolIssue = "";    // problems in the Symbols input (dashboard)
 CChartDrawer     g_drawer;
 CDashboard       g_dashboard;
-CExcursionTracker g_excursions;
-CGuardNews      *g_newsGuard = NULL;   // owned by g_guards; kept for health checks
 datetime         g_lastExport = 0;
 string           g_healthPrinted = "";  // last health report written to the journal
 string           g_symbol;
 datetime         g_testStart;
 string           g_stratNames[] = {"Trend", "Breakout", "Pullback", "BreakoutNY", "VWAPTrend", "PullbackBO", "MeanRevScalp", "MomentumScalp"};   // index = id - 1
+
+string SymbolsLabel(const string sep)
+  {
+   string r = "";
+   for(int e = 0; e < ArraySize(g_engines); e++)
+      r += (e > 0 ? sep : "") + g_engines[e].symbol;
+   return r == "" ? _Symbol : r;
+  }
+
+//--- the news guard of the first engine (all read the same calendar file)
+CGuardNews *NewsGuard(void)
+  {
+   for(int e = 0; e < ArraySize(g_engines); e++)
+      if(CheckPointer(g_engines[e].news) != POINTER_INVALID)
+         return g_engines[e].news;
+   return NULL;
+  }
 
 //+------------------------------------------------------------------+
 //| Inputs -> config                                                 |
@@ -726,16 +750,16 @@ void AddExits(CStrategy *st, const SExitSettings &e)
       m.Configure(e.closeHour, e.closeMinute);
       st.AddPositionModule(m);
      }
-   if(g_cfg.weekendClose)
+   if(g_eng.cfg.weekendClose)
      {
       CManageWeekendClose *m = new CManageWeekendClose();
-      m.Configure(g_cfg.weekendHour);
+      m.Configure(g_eng.cfg.weekendHour);
       st.AddPositionModule(m);
      }
    if(e.newsExitMins > 0)
      {
       CManageNewsExit *m = new CManageNewsExit();
-      m.Configure(g_cfg.news, e.newsExitMins);
+      m.Configure(g_eng.cfg.news, e.newsExitMins);
       st.AddPositionModule(m);
      }
   }
@@ -745,18 +769,16 @@ bool StartStrategy(CStrategy *st, const int id, const SStrategyCommon &s)
    ENUM_TIMEFRAMES tf = (s.tf == PERIOD_CURRENT) ? (ENUM_TIMEFRAMES)_Period : s.tf;
    AddExits(st, s.exits);
    st.Retry(s.retryBlocked, s.retryMins);
-   SRiskSettings risk = g_cfg.risk;
+   SRiskSettings risk = g_eng.cfg.risk;
    if(s.riskPct > 0.0)
       risk.riskPercent = s.riskPct;
-   if(!st.Init(g_symbol, tf, InpMagic + id, s.trade, risk, s.atrLen, s.exitOnFilteredFlip, GetPointer(g_guards)))
+   if(!st.Init(g_eng.symbol, tf, InpMagic + id, s.trade, risk, s.atrLen, s.exitOnFilteredFlip, GetPointer(g_eng.guards)))
      {
       PrintFormat("Strategy %s failed to initialise", st.Name());
       delete st;
       return false;
      }
-   int n = ArraySize(g_strategies);
-   ArrayResize(g_strategies, n + 1);
-   g_strategies[n] = st;
+   g_eng.Add(st);
    return true;
   }
 
@@ -765,7 +787,9 @@ bool BuildTrend(const STrendConfig &c)
    ENUM_TIMEFRAMES tf = (c.s.tf == PERIOD_CURRENT) ? (ENUM_TIMEFRAMES)_Period : c.s.tf;
    CStrategy *st = new CStrategy(g_stratNames[STRAT_TREND - 1]);
    CSignalDJTrend *dj = new CSignalDJTrend();
-   dj.Configure(c.dj);
+   SDJTrendSettings d = c.dj;
+   d.drawBasis = d.drawBasis && g_eng.isChart;   // only the chart's symbol draws its basis line
+   dj.Configure(d);
    st.AddSignal(dj, ROLE_TRIGGER);
    if(c.useHTF)
      {
@@ -809,7 +833,7 @@ bool BuildBreakout(const SBreakoutConfig &c, const int id)
      {
       // filter: price must be beyond today's Asian range on the side of the trade
       CSignalSessionBreakout *asian = new CSignalSessionBreakout();
-      SBreakoutSettings a = g_cfg.brk.brk;
+      SBreakoutSettings a = g_eng.cfg.brk.brk;
       a.tradeEndHour = 23;
       a.tradeEndMin  = 59;
       asian.Configure(a);
@@ -834,17 +858,17 @@ bool BuildBreakout(const SBreakoutConfig &c, const int id)
 void AddIntradayFilters(CStrategy *st)
   {
    CFilterTimeWindow *w = new CFilterTimeWindow();
-   w.Configure(g_cfg.intra.startHour, g_cfg.intra.startMin, g_cfg.intra.endHour, g_cfg.intra.endMin);
+   w.Configure(g_eng.cfg.intra.startHour, g_eng.cfg.intra.startMin, g_eng.cfg.intra.endHour, g_eng.cfg.intra.endMin);
    st.AddSignal(w, ROLE_FILTER);
-   if(g_cfg.intra.trendLen > 0)
+   if(g_eng.cfg.intra.trendLen > 0)
      {
       SFilterTrendMASettings tr;
       tr.maType   = BASIS_EMA;
-      tr.maLen    = g_cfg.intra.trendLen;
+      tr.maLen    = g_eng.cfg.intra.trendLen;
       tr.lookback = 300;
       CFilterTrendMA *f = new CFilterTrendMA();
       f.Configure(tr);
-      f.Timeframe(g_cfg.intra.trendTF);
+      f.Timeframe(g_eng.cfg.intra.trendTF);
       st.AddSignal(f, ROLE_FILTER);
      }
   }
@@ -852,11 +876,11 @@ void AddIntradayFilters(CStrategy *st)
 //--- scalper session windows (London + New York by default)
 void AddScalpWindow(CStrategy *st)
   {
-   if(g_cfg.scalp.alignAsian)
+   if(g_eng.cfg.scalp.alignAsian)
      {
       // daily bias from the proven Asian-range breakout: price must be beyond today's range on the trade side
       CSignalSessionBreakout *asian = new CSignalSessionBreakout();
-      SBreakoutSettings a = g_cfg.brk.brk;
+      SBreakoutSettings a = g_eng.cfg.brk.brk;
       a.tradeEndHour = 23;
       a.tradeEndMin  = 59;
       asian.Configure(a);
@@ -864,8 +888,8 @@ void AddScalpWindow(CStrategy *st)
       st.AddSignal(asian, ROLE_FILTER);
      }
    CFilterTimeWindow *w = new CFilterTimeWindow();
-   w.Configure(g_cfg.scalp.w1StartH, g_cfg.scalp.w1StartM, g_cfg.scalp.w1EndH, g_cfg.scalp.w1EndM);
-   w.Configure2(g_cfg.scalp.w2StartH, g_cfg.scalp.w2StartM, g_cfg.scalp.w2EndH, g_cfg.scalp.w2EndM);
+   w.Configure(g_eng.cfg.scalp.w1StartH, g_eng.cfg.scalp.w1StartM, g_eng.cfg.scalp.w1EndH, g_eng.cfg.scalp.w1EndM);
+   w.Configure2(g_eng.cfg.scalp.w2StartH, g_eng.cfg.scalp.w2StartM, g_eng.cfg.scalp.w2EndH, g_eng.cfg.scalp.w2EndM);
    st.AddSignal(w, ROLE_FILTER);
   }
 
@@ -876,20 +900,20 @@ bool BuildMeanRev(const SMeanRevConfig &c)
    m.Configure(c.mr);
    st.AddSignal(m, ROLE_TRIGGER);
    AddScalpWindow(st);
-   if(g_cfg.scalp.maxAdx > 0.0)
+   if(g_eng.cfg.scalp.maxAdx > 0.0)
      {
       SFilterADXSettings a;
       a.diLen         = 14;
       a.adxLen        = 14;
       a.minAdx        = 0.0;
-      a.maxAdx        = g_cfg.scalp.maxAdx;
+      a.maxAdx        = g_eng.cfg.scalp.maxAdx;
       a.requireDI     = false;
       a.requireRising = false;
       a.lookback      = 300;
       CFilterADX *f = new CFilterADX();
       f.Configure(a);
       f.Name("Regime ADX");
-      f.Timeframe(g_cfg.scalp.regimeTF);
+      f.Timeframe(g_eng.cfg.scalp.regimeTF);
       st.AddSignal(f, ROLE_FILTER);
      }
    return StartStrategy(st, STRAT_MR, c.s);
@@ -902,15 +926,15 @@ bool BuildMomentum(const SMomentumConfig &c)
    m.Configure(c.mo);
    st.AddSignal(m, ROLE_TRIGGER);
    AddScalpWindow(st);
-   if(g_cfg.scalp.trendLen > 0)
+   if(g_eng.cfg.scalp.trendLen > 0)
      {
       SFilterTrendMASettings tr;
       tr.maType   = BASIS_EMA;
-      tr.maLen    = g_cfg.scalp.trendLen;
+      tr.maLen    = g_eng.cfg.scalp.trendLen;
       tr.lookback = 300;
       CFilterTrendMA *f = new CFilterTrendMA();
       f.Configure(tr);
-      f.Timeframe(g_cfg.scalp.trendTF);
+      f.Timeframe(g_eng.cfg.scalp.trendTF);
       st.AddSignal(f, ROLE_FILTER);
      }
    return StartStrategy(st, STRAT_MO, c.s);
@@ -951,28 +975,120 @@ bool RegisterGuards(const SEAConfig &c)
      {
       CGuardNews *g = new CGuardNews();
       g.Configure(c.news);
-      g_guards.Add(g);
-      g_newsGuard = g;
+      g_eng.guards.Add(g);
+      g_eng.news = g;
      }
    if(c.useSession)
      {
       CGuardSession *g = new CGuardSession();
       g.Configure(c.session);
-      g_guards.Add(g);
+      g_eng.guards.Add(g);
      }
    if(c.maxSpread > 0.0)
      {
       CGuardSpread *g = new CGuardSpread();
-      g.Configure(c.maxSpread);
-      g_guards.Add(g);
+      // chart symbol: the input as is; other symbols: the same % of price unless overridden
+      g.Configure(c.maxSpread, g_eng.spec.spread >= 0.0 ? "" : _Symbol);
+      g_eng.guards.Add(g);
      }
    if(c.useDaily)
      {
       CGuardDailyLimits *g = new CGuardDailyLimits();
       g.Configure(c.daily);
-      g_guards.Add(g);
+      g_eng.guards.Add(g);
      }
-   return g_guards.Init(g_symbol, InpMagic);
+   return g_eng.guards.Init(g_eng.symbol, InpMagic);
+  }
+
+//+------------------------------------------------------------------+
+//| One engine per symbol                                            |
+//+------------------------------------------------------------------+
+//--- symbol overrides on the engine's config copy
+void ApplySymbol(CSymbolEngine *e)
+  {
+   double ratio = 1.0;                              // symbol price / chart price, scales the price inputs
+   if(!e.isChart)
+     {
+      double ref = CSymbolList::Price(_Symbol), px = CSymbolList::Price(e.symbol);
+      ratio = (ref > 0.0 && px > 0.0) ? px / ref : 0.0;
+     }
+   double slip  = e.spec.slip >= 0.0 ? e.spec.slip : InpMaxSlippage * ratio;
+   double point = SymbolInfoDouble(e.symbol, SYMBOL_POINT);
+   int    dev   = point > 0.0 ? (int)MathRound(slip / point) : 0;
+   if(dev <= 0 && e.spec.slip < 0.0)
+      dev = 30;                                     // price not known yet: moderate default
+   e.cfg.trend.s.trade.deviation = dev;
+   e.cfg.brk.s.trade.deviation   = dev;
+   e.cfg.ny.s.trade.deviation    = dev;
+   e.cfg.pb.s.trade.deviation    = dev;
+   e.cfg.vw.s.trade.deviation    = dev;
+   e.cfg.pbo.s.trade.deviation   = dev;
+   e.cfg.mr.s.trade.deviation    = dev;
+   e.cfg.mo.s.trade.deviation    = dev;
+   if(e.spec.spread >= 0.0)
+      e.cfg.maxSpread = e.spec.spread;
+   if(e.spec.risk > 0.0)
+      e.cfg.risk.riskPercent = e.spec.risk;
+   if(e.spec.sRisk > 0.0)
+     {
+      e.cfg.mr.s.riskPct = e.spec.sRisk;
+      e.cfg.mo.s.riskPct = e.spec.sRisk;
+     }
+   if(e.spec.iRisk > 0.0)
+     {
+      e.cfg.vw.s.riskPct  = e.spec.iRisk;
+      e.cfg.pbo.s.riskPct = e.spec.iRisk;
+     }
+  }
+
+bool BuildEngine(const SSymbolSpec &spec)
+  {
+   CSymbolEngine *e = new CSymbolEngine();
+   e.spec    = spec;
+   e.symbol  = spec.name;
+   e.isChart = (spec.name == _Symbol);
+   e.cfg     = g_cfg;
+   ApplySymbol(e);
+   int n = ArraySize(g_engines);
+   ArrayResize(g_engines, n + 1);
+   g_engines[n] = e;
+   g_eng = e;
+   e.excursions.Init(e.symbol, InpMagic);
+
+   SAlertSettings alerts;
+   alerts.title     = "Claude EA";
+   alerts.popup     = InpAlertPopup;
+   alerts.push      = InpAlertPush;
+   alerts.email     = false;
+   alerts.sound     = false;
+   alerts.soundFile = "alert.wav";
+   e.alerts.Init(e.symbol, alerts);
+
+   SEAConfig c = e.cfg;
+   if(!RegisterGuards(c))
+      return false;
+   if(c.trend.s.enabled && !BuildTrend(c.trend))
+      return false;
+   if(c.brk.s.enabled && !BuildBreakout(c.brk, STRAT_BREAKOUT))
+      return false;
+   if(c.ny.s.enabled && !BuildBreakout(c.ny, STRAT_NY))
+      return false;
+   if(c.pb.s.enabled && !BuildPullback(c.pb))
+      return false;
+   if(c.vw.s.enabled && !BuildVWAP(c.vw))
+      return false;
+   if(c.pbo.s.enabled && !BuildPBO(c.pbo))
+      return false;
+   if(c.mr.s.enabled && !BuildMeanRev(c.mr))
+      return false;
+   if(c.mo.s.enabled && !BuildMomentum(c.mo))
+      return false;
+   if(e.Total() == 0)
+     {
+      PrintFormat("%s: no strategy enabled", e.symbol);
+      return false;
+     }
+   return true;
   }
 
 //+------------------------------------------------------------------+
@@ -982,16 +1098,22 @@ void DrawChart(const bool withHistory)
   {
    if(!g_drawer.CanDraw())
       return;
-   for(int k = 0; k < ArraySize(g_strategies); k++)
+   for(int e = 0; e < ArraySize(g_engines); e++)
      {
-      if(withHistory && g_drawer.DrawHistory())
+      if(!g_engines[e].isChart)
+         continue;
+      for(int k = 0; k < g_engines[e].Total(); k++)
         {
-         SSignal hist[];
-         int n = g_strategies[k].History(hist);
-         for(int i = 0; i < n; i++)
-            g_drawer.DrawSignal(hist[i]);
+         CStrategy *st = g_engines[e].strategies[k];
+         if(withHistory && g_drawer.DrawHistory())
+           {
+            SSignal hist[];
+            int n = st.History(hist);
+            for(int i = 0; i < n; i++)
+               g_drawer.DrawSignal(hist[i]);
+           }
+         st.DrawOverlays(g_drawer);
         }
-      g_strategies[k].DrawOverlays(g_drawer);
      }
    g_drawer.Redraw();
   }
@@ -1058,54 +1180,63 @@ void CheckHealth(string &txt[], color &clr[])
       AddHealth(txt, clr, HEALTH_WARN, StringFormat("Balance %.0f is above 'Account size cap' %.0f - risk is capped at the smaller size",
                                                     bal, g_cfg.risk.accountSize));
 
-   //--- symbol / chart
-   string sym = g_symbol;
-   StringToUpper(sym);
-   if(StringFind(sym, "XAU") < 0 && StringFind(sym, "GOLD") < 0)
-      AddHealth(txt, clr, HEALTH_WARN, "Symbol " + g_symbol + " - EA is tuned for XAUUSD");
+   //--- symbols / chart
+   if(g_symbolIssue != "")
+      AddHealth(txt, clr, HEALTH_ERROR, "Symbols: " + g_symbolIssue);
+   for(int e = 0; e < ArraySize(g_engines); e++)
+     {
+      string sym = g_engines[e].symbol;
+      StringToUpper(sym);
+      if(StringFind(sym, "XAU") < 0 && StringFind(sym, "GOLD") < 0)
+         AddHealth(txt, clr, HEALTH_WARN, g_engines[e].symbol + ": settings were tuned on XAUUSD - optimise this pair first");
+     }
    if(_Period != PERIOD_M1)
       AddHealth(txt, clr, HEALTH_WARN, "Chart is " + TfName((ENUM_TIMEFRAMES)_Period) + " - EA is tuned for M1");
 
    //--- news calendar
    if(g_cfg.useNews || g_cfg.brk.s.exits.newsExitMins > 0)
      {
-      if(CheckPointer(g_newsGuard) == POINTER_INVALID)
+      if(CheckPointer(NewsGuard()) == POINTER_INVALID)
          AddHealth(txt, clr, HEALTH_WARN, "News exit is on but the news guard is off - enable 'Block entries around news'");
       else
         {
-         g_newsGuard.CanOpen();                               // reloads the file if it changed
+         NewsGuard().CanOpen();                               // reloads the file if it changed
          datetime nowUtc = CTimeZone::ServerToUtc(TimeCurrent());
          if(g_calendarExportError != "")
             AddHealth(txt, clr, HEALTH_ERROR, "News: " + g_calendarExportError);
-         if(!g_newsGuard.FileFound())
+         if(!NewsGuard().FileFound())
             AddHealth(txt, clr, HEALTH_ERROR, "News file NOT FOUND (Common\\Files\\" + CALENDAR_FILE +
                       ") - attach the EA to a live chart to export it");
          else
-            if(g_newsGuard.Events() == 0)
+            if(NewsGuard().Events() == 0)
                AddHealth(txt, clr, HEALTH_ERROR, "News file has no " + g_cfg.news.currencies + " events - re-export");
             else
               {
-               if(g_newsGuard.LastEvent() < nowUtc + 2 * 86400)
+               if(NewsGuard().LastEvent() < nowUtc + 2 * 86400)
                   AddHealth(txt, clr, tester ? HEALTH_WARN : HEALTH_ERROR, "News file ends " +
-                            TimeToString(CTimeZone::UtcToServer(g_newsGuard.LastEvent()), TIME_DATE) +
+                            TimeToString(CTimeZone::UtcToServer(NewsGuard().LastEvent()), TIME_DATE) +
                             " - no protection after that" + (tester ? " (re-export)" : " (auto re-export every 6 h)"));
-               if(g_newsGuard.FirstEvent() > nowUtc)
+               if(NewsGuard().FirstEvent() > nowUtc)
                   AddHealth(txt, clr, HEALTH_WARN, "News file starts " +
-                            TimeToString(CTimeZone::UtcToServer(g_newsGuard.FirstEvent()), TIME_DATE) +
+                            TimeToString(CTimeZone::UtcToServer(NewsGuard().FirstEvent()), TIME_DATE) +
                             " - earlier dates unprotected (lower 'Export from')");
               }
         }
      }
 
    //--- strategies
-   for(int k = 0; k < ArraySize(g_strategies); k++)
-     {
-      if(!g_strategies[k].Ready())
-         AddHealth(txt, clr, HEALTH_WARN, g_strategies[k].Name() + ": waiting for price history");
-      string issue = g_strategies[k].LastIssue();
-      if(issue != "")
-         AddHealth(txt, clr, HEALTH_ERROR, g_strategies[k].Name() + ": " + issue);
-     }
+   bool multi = ArraySize(g_engines) > 1;
+   for(int e = 0; e < ArraySize(g_engines); e++)
+      for(int k = 0; k < g_engines[e].Total(); k++)
+        {
+         CStrategy *st = g_engines[e].strategies[k];
+         string name = (multi ? g_engines[e].symbol + " " : "") + st.Name();
+         if(!st.Ready())
+            AddHealth(txt, clr, HEALTH_WARN, name + ": waiting for price history");
+         string issue = st.LastIssue();
+         if(issue != "")
+            AddHealth(txt, clr, HEALTH_ERROR, name + ": " + issue);
+        }
 
    //--- risk summary (always shown)
    double base = MathMin(AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY));
@@ -1118,7 +1249,8 @@ void CheckHealth(string &txt[], color &clr[])
                                                        g_cfg.risk.riskPercent));
       AddHealth(txt, clr, HEALTH_OK, StringFormat("Risk %.2f%% = %.0f %s per trade, %s", g_cfg.risk.riskPercent,
                                                   base * g_cfg.risk.riskPercent / 100.0, AccountInfoString(ACCOUNT_CURRENCY),
-                                                  InpAllowHedge ? "hedging allowed" : "no hedging"));
+                                                  (InpAllowHedge ? "hedging allowed" : "no hedging") +
+                                                  (multi ? StringFormat(", %d symbols", ArraySize(g_engines)) : "")));
      }
    if(ArraySize(txt) == 1 && clr[0] == HEALTH_OK)
       txt[0] = "All checks OK. " + txt[0];
@@ -1154,7 +1286,7 @@ void UpdateDashboard(void)
       return;
    string lines[], part[];
    color  colours[];
-   AppendLine(lines, StringFormat("Claude XAUUSD EA v%s (build %s)  %s  preset %d", EA_VERSION, EA_BUILD, g_symbol, (int)InpPreset));
+   AppendLine(lines, StringFormat("Claude EA v%s (build %s)  %s  preset %d", EA_VERSION, EA_BUILD, SymbolsLabel(", "), (int)InpPreset));
    AppendLine(lines, "Health:");
    for(int i = 0; i < ArraySize(htxt); i++)
      {
@@ -1166,7 +1298,7 @@ void UpdateDashboard(void)
    //--- next high-impact news
    string newsLine;
    color  newsClr = clrNONE;
-   if(CheckPointer(g_newsGuard) == POINTER_INVALID)
+   if(CheckPointer(NewsGuard()) == POINTER_INVALID)
      {
       newsLine = "Next news: news guard OFF";
       newsClr  = HEALTH_WARN;
@@ -1176,7 +1308,7 @@ void UpdateDashboard(void)
       datetime ev;
       string   evName;
       bool     active;
-      if(!g_newsGuard.NextEvent(ev, evName, active))
+      if(!NewsGuard().NextEvent(ev, evName, active))
         {
          newsLine = "Next news: none in calendar file";
          newsClr  = HEALTH_ERROR;
@@ -1195,18 +1327,24 @@ void UpdateDashboard(void)
    AppendLine(lines, newsLine);
    ArrayResize(colours, ArraySize(lines));
    colours[ArraySize(lines) - 1] = newsClr;
-   for(int k = 0; k < ArraySize(g_strategies); k++)
+   for(int e = 0; e < ArraySize(g_engines); e++)
      {
-      g_strategies[k].Statuses(part);
-      for(int i = 0; i < ArraySize(part); i++)
-         AppendLine(lines, part[i]);
-     }
-   if(g_guards.Total() > 0)
-     {
-      AppendLine(lines, "Guards:");
-      g_guards.Statuses(part);
-      for(int i = 0; i < ArraySize(part); i++)
-         AppendLine(lines, "  " + part[i]);
+      CSymbolEngine *en = g_engines[e];
+      if(ArraySize(g_engines) > 1)
+         AppendLine(lines, "=== " + en.symbol + " ===");
+      for(int k = 0; k < en.Total(); k++)
+        {
+         en.strategies[k].Statuses(part);
+         for(int i = 0; i < ArraySize(part); i++)
+            AppendLine(lines, part[i]);
+        }
+      if(en.guards.Total() > 0)
+        {
+         AppendLine(lines, "Guards:");
+         en.guards.Statuses(part);
+         for(int i = 0; i < ArraySize(part); i++)
+            AppendLine(lines, "  " + part[i]);
+        }
      }
    int n = ArraySize(colours);
    ArrayResize(colours, ArraySize(lines));
@@ -1226,7 +1364,6 @@ int OnInit()
   {
    g_symbol    = _Symbol;
    g_testStart = TimeCurrent();
-   g_excursions.Init(_Symbol, InpMagic);
 
    CTimeZone::Server(InpServerTZ);
    string tzMsg;
@@ -1263,38 +1400,21 @@ int OnInit()
    g_drawer.Init(prefix, draw);
    g_dashboard.Init(prefix + "dash_", InpShowDashboard, 10, 25, InpFontSize);
 
-   if(!RegisterGuards(g_cfg))
-      return INIT_PARAMETERS_INCORRECT;
-   if(g_cfg.trend.s.enabled && !BuildTrend(g_cfg.trend))
-      return INIT_PARAMETERS_INCORRECT;
-   if(g_cfg.brk.s.enabled && !BuildBreakout(g_cfg.brk, STRAT_BREAKOUT))
-      return INIT_PARAMETERS_INCORRECT;
-   if(g_cfg.ny.s.enabled && !BuildBreakout(g_cfg.ny, STRAT_NY))
-      return INIT_PARAMETERS_INCORRECT;
-   if(g_cfg.pb.s.enabled && !BuildPullback(g_cfg.pb))
-      return INIT_PARAMETERS_INCORRECT;
-   if(g_cfg.vw.s.enabled && !BuildVWAP(g_cfg.vw))
-      return INIT_PARAMETERS_INCORRECT;
-   if(g_cfg.pbo.s.enabled && !BuildPBO(g_cfg.pbo))
-      return INIT_PARAMETERS_INCORRECT;
-   if(g_cfg.mr.s.enabled && !BuildMeanRev(g_cfg.mr))
-      return INIT_PARAMETERS_INCORRECT;
-   if(g_cfg.mo.s.enabled && !BuildMomentum(g_cfg.mo))
-      return INIT_PARAMETERS_INCORRECT;
-   if(ArraySize(g_strategies) == 0)
+   SSymbolSpec specs[];
+   if(!CSymbolList::Parse(InpSymbols, InpSymbolSlot, specs, g_symbolIssue))
      {
-      Print("No strategy enabled");
+      PrintFormat("Symbols: %s", g_symbolIssue == "" ? "no symbol to trade" : g_symbolIssue);
       return INIT_PARAMETERS_INCORRECT;
      }
-
-   SAlertSettings alerts;
-   alerts.title     = "Claude EA";
-   alerts.popup     = InpAlertPopup;
-   alerts.push      = InpAlertPush;
-   alerts.email     = false;
-   alerts.sound     = false;
-   alerts.soundFile = "alert.wav";
-   g_alerts.Init(g_symbol, alerts);
+   if(g_symbolIssue != "")
+      PrintFormat("Symbols: %s", g_symbolIssue);
+   for(int i = 0; i < ArraySize(specs); i++)
+      if(!BuildEngine(specs[i]))
+         return INIT_PARAMETERS_INCORRECT;
+   g_eng = NULL;
+   PrintFormat("Trading %d symbol(s): %s", ArraySize(g_engines), SymbolsLabel(", "));
+   if(ArraySize(g_engines) > 1 && !MQLInfoInteger(MQL_TESTER))
+      EventSetTimer(1);                              // other symbols tick independently of the chart
 
    DrawChart(true);
    UpdateDashboard();
@@ -1306,16 +1426,48 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
   {
-   for(int k = 0; k < ArraySize(g_strategies); k++)
+   EventKillTimer();
+   for(int e = 0; e < ArraySize(g_engines); e++)
      {
-      g_strategies[k].Deinit();
-      delete g_strategies[k];
+      g_engines[e].Deinit();
+      delete g_engines[e];
      }
-   ArrayResize(g_strategies, 0);
-   g_guards.Deinit();
+   ArrayResize(g_engines, 0);
    g_drawer.Clear();
    g_dashboard.Clear();
    ChartRedraw(0);
+  }
+
+//+------------------------------------------------------------------+
+//| Run every symbol's guards, strategies and trackers               |
+//+------------------------------------------------------------------+
+bool ProcessEngines(void)
+  {
+   bool anyFired = false;
+   for(int e = 0; e < ArraySize(g_engines); e++)
+     {
+      CSymbolEngine *en = g_engines[e];
+      en.excursions.OnTick();
+      en.guards.OnTick();
+      for(int k = 0; k < en.Total(); k++)
+        {
+         SSignal sig;
+         if(en.strategies[k].OnTick(sig))
+           {
+            anyFired = true;
+            if(en.isChart)
+               g_drawer.DrawSignal(sig);
+            en.alerts.Notify(sig);
+           }
+        }
+     }
+   return anyFired;
+  }
+
+//--- live multi-symbol: other symbols can tick while the chart symbol is quiet
+void OnTimer()
+  {
+   ProcessEngines();
   }
 
 //+------------------------------------------------------------------+
@@ -1329,19 +1481,7 @@ void OnTick()
       ExportCalendar(InpNewsFrom, TimeCurrent() + 21 * 86400);
       g_lastExport = TimeCurrent();
      }
-   g_excursions.OnTick();
-   g_guards.OnTick();
-   bool anyFired = false;
-   for(int k = 0; k < ArraySize(g_strategies); k++)
-     {
-      SSignal sig;
-      if(g_strategies[k].OnTick(sig))
-        {
-         anyFired = true;
-         g_drawer.DrawSignal(sig);
-         g_alerts.Notify(sig);
-        }
-     }
+   bool anyFired = ProcessEngines();
 
    // history may have been unavailable at attach time (e.g. tester start)
    static bool historyDrawn = false;
@@ -1361,18 +1501,22 @@ void OnTick()
 double OnTester()
   {
    SDailyStats daily;
-   CDailyStats::Compute(g_symbol, InpMagic, daily);
+   CDailyStats::Compute(ArraySize(g_engines) == 1 ? g_engines[0].symbol : "", InpMagic, daily);   // "" = all symbols
    double score = CTesterCriterion::Calculate(InpCriterion, InpMinTrades, daily.bestShare);
    if(InpReportResults)
      {
       string build  = EA_VERSION + " " + EA_BUILD;
       string config = ConfigSummary(g_cfg);
-      CTestReporter::WriteConsistency(g_symbol, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, daily);
-      CTestReporter::WriteSummary(g_symbol, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, score);
-      CTestReporter::WriteStrategyStats(g_symbol, (ENUM_TIMEFRAMES)_Period, (int)InpPreset, build, config, InpMagic, g_stratNames);
+      string label  = SymbolsLabel("+");
+      CTestReporter::WriteConsistency(label, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, daily);
+      CTestReporter::WriteSummary(label, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, score);
+      for(int e = 0; e < ArraySize(g_engines); e++)
+         CTestReporter::WriteStrategyStats(g_engines[e].symbol, (ENUM_TIMEFRAMES)_Period, (int)InpPreset, build, config, InpMagic, g_stratNames);
      }
    if(InpExportTrades && !MQLInfoInteger(MQL_OPTIMIZATION))
-      CTestReporter::WriteTrades(g_symbol, (ENUM_TIMEFRAMES)_Period, InpMagic, (int)InpPreset, GetPointer(g_excursions), g_testStart);
+      for(int e = 0; e < ArraySize(g_engines); e++)
+         CTestReporter::WriteTrades(g_engines[e].symbol, (ENUM_TIMEFRAMES)_Period, InpMagic, (int)InpPreset,
+                                    GetPointer(g_engines[e].excursions), g_testStart);
    return score;
   }
 //+------------------------------------------------------------------+

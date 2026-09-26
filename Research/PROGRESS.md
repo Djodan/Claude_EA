@@ -702,3 +702,11 @@ Round23_Cash_ScaleSweep: slow complete, target 0–40% step 4 × scalper risk 5�
 Scaled run (real ticks, $1k): **$1k → $44.4k**, PF 1.31, DD 36%, largest loss −$5.9k. The tester still had the
 old input list (no InpDailyTargetPct) → it ran with **no daily target**, pure 10% compounding.
 Final_Cash_200PerDay_Half: everything halved – risk 5%, daily target 10%, daily loss 15%.
+
+## v4.40 – multi-symbol engine
+`InpSymbols` (comma list, per-symbol overrides) → one CSymbolEngine per symbol (own config copy, guards,
+strategies, trackers, alerts). `InpSymbolSlot` 0 = all, N = only the Nth (optimise 1..N = per-pair runs).
+Spread/slippage scale by price from the chart symbol unless overridden; news `AUTO`; daily limits account-wide;
+results: symbol column "A+B", strategies/trades per symbol. Regression: single-symbol runs must match v4.31.
+Round 24 sets: Round24_PairScan (Top1 settings × 10 pairs, slow complete), Round24_PairOptimize (Round 20 ranges
+× 10 pairs, genetic), Multi_Gold_Silver_Top1 (portfolio example).
