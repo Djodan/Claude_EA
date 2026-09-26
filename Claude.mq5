@@ -30,7 +30,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.30"
+#define EA_VERSION "4.31"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -290,6 +290,7 @@ input bool               InpUseDaily      = false;          // Daily limits
 input double             InpDailyMaxLoss  = 3.0;            // Max daily loss %
 input int                InpDailyMaxTrades= 0;              // Max trades per day (0 = off)
 input double             InpDailyTargetUSD= 0;              // Daily profit goal in money - stop for the day (0 = off)
+input double             InpDailyTargetPct= 0;              // Daily profit goal in % of day-start balance - scales as the account grows (0 = off)
 input double             InpDailyMaxLossUSD= 0;             // Daily loss limit in money - stop for the day (0 = off)
 
 input group "=== Alerts ==="
@@ -674,7 +675,7 @@ void BuildConfig(SEAConfig &c)
    c.maxSpread = InpMaxSpread;
    c.useDaily              = InpUseDaily;
    c.daily.maxLossPct      = InpDailyMaxLoss;
-   c.daily.profitTargetPct = 0.0;
+   c.daily.profitTargetPct = InpDailyTargetPct;
    c.daily.maxTrades       = InpDailyMaxTrades;
    c.daily.closeOnLimit    = true;
    c.daily.profitTargetMoney = InpDailyTargetUSD;

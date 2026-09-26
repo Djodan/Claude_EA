@@ -693,3 +693,9 @@ Top1 +44.8k PF 1.53 DD 4.43% · Lowest DD +11.8k PF 2.64 DD 1.36%.
 187 trades, equity DD 29%, largest loss −$1,249. **86 of 130 trading days ≥ $200** (Jan 3/12 while the account
 was small, May–Sep 10–15 per month); Aug −$314 was the only losing month.
 Round22 optimisation set was first run as a single test (code defaults: risk 0.8, S1/S2/S3 on) → −$569, not a result.
+
+## Round 23 – scale the $200/day set with the balance (v4.31)
+New input `InpDailyTargetPct`: daily goal in % of the day-start balance (the guard already supported it).
+$200 fixed capped growth once the account was ~$10k ($200 = 2%/day). Final_Cash_200PerDay_Scaled = same
+scalper, 10% risk, daily target **20%** ($200 at $1k, $2,000 at $10k), daily loss 30%.
+Round23_Cash_ScaleSweep: slow complete, target 0–40% step 4 × scalper risk 5–15% (121 passes), net profit.

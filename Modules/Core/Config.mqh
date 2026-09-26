@@ -307,7 +307,9 @@ string ConfigSummary(const SEAConfig &c)
    if(c.useSession)
       s += " SESS";
    if(c.useDaily)
-      s += StringFormat(" DAILY+%.0f/-%.0f", c.daily.profitTargetMoney, c.daily.maxLossMoney);
+      s += StringFormat(" DAILY+%.0f/-%.0f", c.daily.profitTargetMoney, c.daily.maxLossMoney) +
+           (c.daily.profitTargetPct > 0.0 ? StringFormat(" +%.1f%%", c.daily.profitTargetPct) : "") +
+           (c.daily.maxLossPct > 0.0 ? StringFormat(" -%.1f%%", c.daily.maxLossPct) : "");
    if(c.maxSpread > 0.0)
       s += StringFormat(" SPR%.2f", c.maxSpread);
    return s;
