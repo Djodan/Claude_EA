@@ -754,3 +754,16 @@ Both pin the v4.40+ inputs to single-gold behaviour. To do: run both on 2025 (ou
 - New_1k_2: the 20% target changes little vs pure 10% compounding (+44.4k PF 1.31) – PF/DD worse than New_1k_1.
 - Multi-pair $1k: every extra pair lowers PF and raises DD; untuned non-gold pairs add no edge. Gold-only stays best.
 - Still to run: New_Prop_Low_Risk 2026 + both prop sets on 2025 (out-of-sample).
+- **New_Prop_Low_Risk** (real ticks 2026): +18,320 PF 2.68 DD 1.86%, 126 trades, max loss **0.602%** ✅, best day 13.9% – identical to Final_Prop_LowRisk_Maintain (regression OK).
+- Note: XAGUSD / XAUEUR took **0 trades** in the multi-pair runs (fixed spread overrides 0.05 / 0.9 probably below
+  Alpari's spread) – the "metals" result was gold alone. With gold settings the FX scalps lose (PF 0.35–0.70).
+
+## Round 28 – second pair: GBPUSD (diversify the gold engines)
+Why GBPUSD: S2 is the classic London breakout of the Asian range (GBPUSD = its home market), low correlation with
+gold (silver/XAUEUR move with gold → same losing days), cheap spread, tick data 2020+ (2025 out-of-sample possible),
+FX stops fit the $1k minimum lot. Gold settings lose on it → optimise first.
+- `Round28_GBP_1k` = New_1k_1 (scalper, 10% risk) with 25 scalper + Asian-range inputs optimised.
+- `Round28_GBP_Prop` = New_Prop_High_Risk (S2 + S3 + scalper, 0.45% / 0.7%) with 48 inputs optimised (enables on/off).
+Both: spread limit / slippage 0.0003 (3 pips), news AUTO (GBP+USD), daily limits OFF (broad first), TC_PROFIT_DD_PCT.
+Run on **GBPUSD M1** 2026.01.01–2026.09.21, $1k / $100k, 1-min OHLC, fast genetic, Custom max (2–3 runs).
+Then: real-tick check of the top passes → 2025 → save GBPUSD profile → portfolio XAUUSD+GBPUSD with profiles ON.
