@@ -34,7 +34,7 @@ Shell notes: Git Bash; bash heredoc `python - <<'EOF'` works (never add `</dev/n
 it closed; always compile yourself. MT5 terminal is usually open → cannot run the tester from the CLI; the
 user runs tests and reports "results are ready" → read the CSVs / HTML / XML yourself.
 
-## 3. Architecture (v4.52)
+## 3. Architecture (v4.53)
 ```
 inputs ──BuildConfig──► SEAConfig g_cfg ──ApplyPreset──► per symbol: CSymbolEngine
    (all reads via PD/PL/PB/PS accessors so a per-pair profile can replace any input)
@@ -80,6 +80,7 @@ CStrategy     = signal modules (1 TRIGGER + FILTERs) + CTradeManager + CRiskMana
   text beats a profile file; unknown keys show red on the health. Build with
   `python Research/make_portfolio.py <Name> --base <set> XAUUSD GBPUSD=<gbp set>[;srisk=5][@off] [InpX=v ...]`.
   MT5 cuts string inputs at 255 chars incl. the name (243 value) → chunks of 240. Daily limits are account-wide: give every pair the same daily settings. Risks add up across pairs.
+- **v4.53 `InpMaxOpenRiskPct`**: combined open risk to the stops across all pairs; new trades cut to fit / skipped (prop 1% per idea).
 - Everything else is scale-free (ATR/R-based). Settings are tuned on XAUUSD only – other pairs untested.
 
 ## 4. Creating sets – `Research/make_set.py`
@@ -122,6 +123,7 @@ python Research/make_set.py <Name> [--exact-name] [--profile] NAME=value NAME=st
 ## 6. Current recommended sets (Research/sets)
 | Set | Use | Status |
 |---|---|---|
+| **New1_1k_1 / New1_1k_2 / New1_Prop_High_Risk / New1_Prop_Low_Risk** | the New_ sets regenerated for v4.53 (new inputs off) – use these | same results expected |
 | New_Prop_Low_Risk | Prop keep/pass: Top_2 at 0.6%, day stop −2% | tested: +18.3k PF 2.68 DD 1.86% worst 0.60% |
 | New_Prop_High_Risk | Prop challenge: scalper 0.7% + Top_1 swing 0.45%, day −3% | tested: +64.6k PF 1.64 DD 3.78% worst 0.746% |
 | New_1k_1 | $1k high risk, $200/day (legacy-pinned) | tested: $13,216.98 ✅ (v4.51 regression OK) |
