@@ -727,3 +727,6 @@ All: R19_B scalper engines, $1k, compounding, weekend close, daily limits accoun
 | Cash_Multi_Metals | XAUUSD, XAGUSD, XAUEUR | 7% | +$200 / −25% |
 | Cash_Multi_Wide_Adaptive | 8 (metals, majors, JPY crosses), activity filter 0.8, spread ≤ 2.5% D1 ATR | 3% | +20% / −25% |
 Non-gold pairs untested with these settings.
+New_1k_1 = Final_Cash_200PerDay with every v4.40+ input pinned to the old behaviour (chart symbol only, no
+profiles/activity/ATR spread, news USD) – must reproduce $1k → $13,216.98. New_1k_2 = same with the daily
+target at 20% of balance (the Scaled idea, now with the target actually applied).
