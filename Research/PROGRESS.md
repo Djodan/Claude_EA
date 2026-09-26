@@ -699,3 +699,6 @@ New input `InpDailyTargetPct`: daily goal in % of the day-start balance (the gua
 $200 fixed capped growth once the account was ~$10k ($200 = 2%/day). Final_Cash_200PerDay_Scaled = same
 scalper, 10% risk, daily target **20%** ($200 at $1k, $2,000 at $10k), daily loss 30%.
 Round23_Cash_ScaleSweep: slow complete, target 0–40% step 4 × scalper risk 5–15% (121 passes), net profit.
+Scaled run (real ticks, $1k): **$1k → $44.4k**, PF 1.31, DD 36%, largest loss −$5.9k. The tester still had the
+old input list (no InpDailyTargetPct) → it ran with **no daily target**, pure 10% compounding.
+Final_Cash_200PerDay_Half: everything halved – risk 5%, daily target 10%, daily loss 15%.
