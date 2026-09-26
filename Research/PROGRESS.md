@@ -767,3 +767,13 @@ FX stops fit the $1k minimum lot. Gold settings lose on it → optimise first.
 Both: spread limit / slippage 0.0003 (3 pips), news AUTO (GBP+USD), daily limits OFF (broad first), TC_PROFIT_DD_PCT.
 Run on **GBPUSD M1** 2026.01.01–2026.09.21, $1k / $100k, 1-min OHLC, fast genetic, Custom max (2–3 runs).
 Then: real-tick check of the top passes → 2025 → save GBPUSD profile → portfolio XAUUSD+GBPUSD with profiles ON.
+
+## v4.52 – up to 5 pairs with their own settings in ONE set
+Inputs `InpPairN_On` / `InpPairN` (symbol) / `InpPairN_S1..S4` (settings text "key=value;...", Inp prefix optional,
+short keys spread/slip/risk/srisk/irisk too), N = 1..5. Any pair on → the pairs replace `InpSymbols`; each pair's text
+is applied like a profile (beats a profile file); unknown keys → red health line. `InpSymbolSlot` N = Nth pair that
+is on. results.csv config = each pair's own summary. `Research/make_portfolio.py` builds the set from a base set +
+each pair's winning set (writes only the inputs that differ, compacted, ≤ 250 chars per text input → ~60–75
+settings per pair).
+- **Round29_PairsCheck** (regression): base New_Prop_High_Risk, pair 1 XAUUSD = New_1k_1 via 70 pair settings.
+  Run XAUUSD M1, $1k, real ticks → must reproduce **$13,216.98**.

@@ -9,6 +9,8 @@
 //|  Broker suffixes are resolved automatically (EURUSD -> EURUSD.a).|
 //|  slot N > 0 keeps only the Nth symbol of the list, so the tester |
 //|  can optimise "InpSymbolSlot" to run the pairs one by one.       |
+//|  ParsePairs(): the 5 Pair inputs (v4.52) - on/off, symbol and a  |
+//|  "key=value;..." text with that pair's own settings.             |
 //+------------------------------------------------------------------+
 #ifndef CLAUDE_SYMBOLLIST_MQH
 #define CLAUDE_SYMBOLLIST_MQH
@@ -21,6 +23,7 @@ struct SSymbolSpec
    double            risk;      // risk % for S1-S4 (0 = input)
    double            sRisk;     // risk % for the scalper engines (0 = input)
    double            iRisk;     // risk % for the intraday engines (0 = input)
+   string            settings;  // pair's own inputs "InpX=v;..." (Pair inputs), applied like a profile
   };
 
 class CSymbolList
@@ -32,6 +35,44 @@ private:
       StringTrimLeft(r);
       StringTrimRight(r);
       return r;
+     }
+
+   static void       Init(SSymbolSpec &s, const string name)
+     {
+      s.name     = name;
+      s.spread   = -1.0;
+      s.slip     = -1.0;
+      s.risk     = 0.0;
+      s.sRisk    = 0.0;
+      s.iRisk    = 0.0;
+      s.settings = "";
+     }
+
+   //--- the short override keys; false = not one of them
+   static bool       ShortKey(SSymbolSpec &s, string key, const double v)
+     {
+      StringToLower(key);
+      if(key == "spread")
+         s.spread = v;
+      else if(key == "slip")
+         s.slip = v;
+      else if(key == "risk")
+         s.risk = v;
+      else if(key == "srisk")
+         s.sRisk = v;
+      else if(key == "irisk")
+         s.iRisk = v;
+      else
+         return false;
+      return true;
+     }
+
+   static bool       Listed(const SSymbolSpec &out[], const string name)
+     {
+      for(int k = 0; k < ArraySize(out); k++)
+         if(out[k].name == name)
+            return true;
+      return false;
      }
 
 public:
@@ -90,21 +131,13 @@ public:
          if(slot > 0 && pos != slot)
             continue;
          SSymbolSpec s;
-         s.name   = Resolve(parts[0]);
-         s.spread = -1.0;
-         s.slip   = -1.0;
-         s.risk   = 0.0;
-         s.sRisk  = 0.0;
-         s.iRisk  = 0.0;
+         Init(s, Resolve(parts[0]));
          if(s.name == "")
            {
             err += "symbol '" + Trim(parts[0]) + "' not found; ";
             continue;
            }
-         bool dup = false;
-         for(int k = 0; k < ArraySize(out); k++)
-            dup = dup || out[k].name == s.name;
-         if(dup)
+         if(Listed(out, s.name))
             continue;
          if(ArraySize(parts) > 1)
            {
@@ -120,19 +153,7 @@ public:
                   continue;
                  }
                string key = Trim(p[0]);
-               StringToLower(key);
-               double v = StringToDouble(Trim(p[1]));
-               if(key == "spread")
-                  s.spread = v;
-               else if(key == "slip")
-                  s.slip = v;
-               else if(key == "risk")
-                  s.risk = v;
-               else if(key == "srisk")
-                  s.sRisk = v;
-               else if(key == "irisk")
-                  s.iRisk = v;
-               else
+               if(!ShortKey(s, key, StringToDouble(Trim(p[1]))))
                   err += s.name + ": unknown key '" + key + "'; ";
               }
            }
@@ -142,6 +163,57 @@ public:
         }
       if(slot > 0 && ArraySize(out) == 0 && err == "")
          err = StringFormat("symbol slot %d is beyond the list (%d symbols)", slot, pos);
+      return ArraySize(out) > 0;
+     }
+
+   //--- Pair inputs: pair i is used when on[i] and sym[i] set; settings[i] = "key=value;..." (short keys
+   //--- spread/slip/risk/srisk/irisk go to the spec, everything else is that pair's own input value)
+   static bool       ParsePairs(const bool &on[], const string &sym[], const string &settings[], const int slot,
+                                SSymbolSpec &out[], string &err)
+     {
+      ArrayResize(out, 0);
+      err = "";
+      int pos = 0;
+      for(int i = 0; i < ArraySize(on); i++)
+        {
+         if(!on[i])
+            continue;
+         if(Trim(sym[i]) == "")
+           {
+            err += StringFormat("pair %d is on but has no symbol; ", i + 1);
+            continue;
+           }
+         pos++;
+         if(slot > 0 && pos != slot)
+            continue;
+         SSymbolSpec s;
+         Init(s, Resolve(sym[i]));
+         if(s.name == "")
+           {
+            err += StringFormat("pair %d: symbol '%s' not found; ", i + 1, Trim(sym[i]));
+            continue;
+           }
+         if(Listed(out, s.name))
+           {
+            err += StringFormat("pair %d: %s is listed twice - second one ignored; ", i + 1, s.name);
+            continue;
+           }
+         string kv[];
+         int nk = StringSplit(settings[i], ';', kv);
+         for(int k = 0; k < nk; k++)
+           {
+            string p[];
+            if(StringSplit(kv[k], '=', p) == 2 && ShortKey(s, Trim(p[0]), StringToDouble(Trim(p[1]))))
+               continue;
+            if(Trim(kv[k]) != "")
+               s.settings += Trim(kv[k]) + ";";
+           }
+         int m = ArraySize(out);
+         ArrayResize(out, m + 1);
+         out[m] = s;
+        }
+      if(slot > 0 && ArraySize(out) == 0 && err == "")
+         err = StringFormat("symbol slot %d is beyond the pairs switched on (%d)", slot, pos);
       return ArraySize(out) > 0;
      }
   };

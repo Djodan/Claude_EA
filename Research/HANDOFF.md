@@ -34,7 +34,7 @@ Shell notes: Git Bash; bash heredoc `python - <<'EOF'` works (never add `</dev/n
 it closed; always compile yourself. MT5 terminal is usually open → cannot run the tester from the CLI; the
 user runs tests and reports "results are ready" → read the CSVs / HTML / XML yourself.
 
-## 3. Architecture (v4.51)
+## 3. Architecture (v4.52)
 ```
 inputs ──BuildConfig──► SEAConfig g_cfg ──ApplyPreset──► per symbol: CSymbolEngine
    (all reads via PD/PL/PB/PS accessors so a per-pair profile can replace any input)
@@ -75,6 +75,11 @@ CStrategy     = signal modules (1 TRIGGER + FILTERs) + CTradeManager + CRiskMana
 - Without overrides, spread/slippage inputs (set for the chart symbol) scale by price; a spread override is absolute
   and beats `InpSpreadAtrPct`.
 - `InpUseActivity/Min/Days`, `InpSpreadAtrPct`, `InpUseProfiles` (keep profiles OFF while optimising).
+- **v4.52 Pair inputs** (one set = whole portfolio): `InpPair1..5_On`, `InpPairN` symbol, `InpPairN_S1..S4` settings
+  text `key=value;...` (only what differs from the chart inputs; short keys too). Any pair on → replaces `InpSymbols`;
+  text beats a profile file; unknown keys show red on the health. Build with
+  `python Research/make_portfolio.py <Name> --base <set> XAUUSD GBPUSD=<gbp set>[;srisk=5][@off] [InpX=v ...]`.
+  Daily limits are account-wide: give every pair the same daily settings. Risks add up across pairs.
 - Everything else is scale-free (ATR/R-based). Settings are tuned on XAUUSD only – other pairs untested.
 
 ## 4. Creating sets – `Research/make_set.py`

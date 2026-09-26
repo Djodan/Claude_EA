@@ -31,9 +31,11 @@
 //|  Multi-symbol: "Symbols" input -> one CSymbolEngine per symbol  |
 //|  (own guards, strategies, overrides); daily limits are account- |
 //|  wide. "Symbol slot" lets the optimiser run the pairs one by one.|
+//|  Pairs (v4.52): 5 on/off slots, each a symbol + its own settings |
+//|  text, so a whole multi-pair portfolio lives in one .set file.   |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.51"
+#define EA_VERSION "4.52"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -111,6 +113,38 @@ input bool               InpUseProfiles   = false;          // Per-pair profiles
 input bool               InpUseActivity   = false;          // Trade only in each pair's own active hours (hourly tick-volume profile)
 input double             InpActivityMin   = 0.8;            // Active hour = volume >= this x the pair's mean hourly volume
 input int                InpActivityDays  = 20;             // Days of H1 history for the volume profile
+
+input group "=== Pairs: up to 5 pairs, each with its own settings, in one set ==="
+input bool               InpPair1_On    = false;          // Pair 1: on (any pair on -> the pairs replace "Symbols")
+input string             InpPair1       = "";             // Pair 1: symbol, e.g. XAUUSD
+input string             InpPair1_S1    = "";             // Pair 1: settings key=value;... (only what differs from the inputs)
+input string             InpPair1_S2    = "";             // Pair 1: settings, continued
+input string             InpPair1_S3    = "";             // Pair 1: settings, continued
+input string             InpPair1_S4    = "";             // Pair 1: settings, continued
+input bool               InpPair2_On    = false;          // Pair 2: on
+input string             InpPair2       = "";             // Pair 2: symbol, e.g. GBPUSD
+input string             InpPair2_S1    = "";             // Pair 2: settings key=value;... (only what differs from the inputs)
+input string             InpPair2_S2    = "";             // Pair 2: settings, continued
+input string             InpPair2_S3    = "";             // Pair 2: settings, continued
+input string             InpPair2_S4    = "";             // Pair 2: settings, continued
+input bool               InpPair3_On    = false;          // Pair 3: on
+input string             InpPair3       = "";             // Pair 3: symbol, e.g. EURUSD
+input string             InpPair3_S1    = "";             // Pair 3: settings key=value;... (only what differs from the inputs)
+input string             InpPair3_S2    = "";             // Pair 3: settings, continued
+input string             InpPair3_S3    = "";             // Pair 3: settings, continued
+input string             InpPair3_S4    = "";             // Pair 3: settings, continued
+input bool               InpPair4_On    = false;          // Pair 4: on
+input string             InpPair4       = "";             // Pair 4: symbol, e.g. USDJPY
+input string             InpPair4_S1    = "";             // Pair 4: settings key=value;... (only what differs from the inputs)
+input string             InpPair4_S2    = "";             // Pair 4: settings, continued
+input string             InpPair4_S3    = "";             // Pair 4: settings, continued
+input string             InpPair4_S4    = "";             // Pair 4: settings, continued
+input bool               InpPair5_On    = false;          // Pair 5: on
+input string             InpPair5       = "";             // Pair 5: symbol, e.g. XAGUSD
+input string             InpPair5_S1    = "";             // Pair 5: settings key=value;... (only what differs from the inputs)
+input string             InpPair5_S2    = "";             // Pair 5: settings, continued
+input string             InpPair5_S3    = "";             // Pair 5: settings, continued
+input string             InpPair5_S4    = "";             // Pair 5: settings, continued
 
 input group "=== S1 Trend: DJ Trend flip ==="
 input bool               InpT_Enable      = true;           // Enable
@@ -1075,9 +1109,13 @@ bool BuildEngine(const SSymbolSpec &spec)
    e.isChart = (spec.name == _Symbol);
    e.cfg     = g_cfg;
    CProfile prof;
-   if(InpUseProfiles && prof.Load(e.symbol))
+   bool fileProf = InpUseProfiles && prof.Load(e.symbol);
+   string bad = spec.settings != "" ? prof.AddText(spec.settings) : "";   // Pair settings beat the file
+   if(bad != "")
+      g_symbolIssue += e.symbol + ": bad pair settings " + bad + "; ";
+   if(prof.Count() > 0)
      {
-      // the profile's values replace the inputs for this pair only
+      // the profile's / pair settings' values replace the inputs for this pair only
       g_prof = GetPointer(prof);
       BuildConfig(e.cfg);
       ApplyPreset((ENUM_EA_PRESET)PL("InpPreset", (long)InpPreset), e.cfg);
@@ -1086,7 +1124,12 @@ bool BuildEngine(const SSymbolSpec &spec)
       if(e.spec.slip < 0.0 && prof.Has("InpMaxSlippage"))
          e.spec.slip = PD("InpMaxSlippage", InpMaxSlippage);
       g_prof = NULL;
-      e.profile = StringFormat("%s (%d values)", prof.File(), prof.Count());
+      string unused = prof.UnusedText();
+      if(unused != "")
+         g_symbolIssue += e.symbol + ": unknown pair settings " + unused + "; ";
+      e.profile = fileProf ? StringFormat("%s (%d values)", prof.File(), prof.Count() - prof.TextCount()) : "";
+      if(prof.TextCount() > 0)
+         e.profile += (e.profile == "" ? "" : " + ") + StringFormat("%d pair settings", prof.TextCount());
       PrintFormat("%s: profile %s -> %s", e.symbol, e.profile, ConfigSummary(e.cfg));
      }
    ApplySymbol(e);
@@ -1452,7 +1495,21 @@ int OnInit()
    g_dashboard.Init(prefix + "dash_", InpShowDashboard, 10, 25, InpFontSize);
 
    SSymbolSpec specs[];
-   if(!CSymbolList::Parse(InpSymbols, InpSymbolSlot, specs, g_symbolIssue))
+   bool   pOn[]  = {InpPair1_On, InpPair2_On, InpPair3_On, InpPair4_On, InpPair5_On};
+   string pSym[] = {InpPair1, InpPair2, InpPair3, InpPair4, InpPair5};
+   string pSet[] = {InpPair1_S1 + ";" + InpPair1_S2 + ";" + InpPair1_S3 + ";" + InpPair1_S4,
+                    InpPair2_S1 + ";" + InpPair2_S2 + ";" + InpPair2_S3 + ";" + InpPair2_S4,
+                    InpPair3_S1 + ";" + InpPair3_S2 + ";" + InpPair3_S3 + ";" + InpPair3_S4,
+                    InpPair4_S1 + ";" + InpPair4_S2 + ";" + InpPair4_S3 + ";" + InpPair4_S4,
+                    InpPair5_S1 + ";" + InpPair5_S2 + ";" + InpPair5_S3 + ";" + InpPair5_S4};
+   bool usePairs = false;
+   for(int i = 0; i < 5; i++)
+      usePairs = usePairs || pOn[i];
+   bool listed = usePairs ? CSymbolList::ParsePairs(pOn, pSym, pSet, InpSymbolSlot, specs, g_symbolIssue)
+                          : CSymbolList::Parse(InpSymbols, InpSymbolSlot, specs, g_symbolIssue);
+   if(usePairs && StringLen(InpSymbols) > 0)
+      g_symbolIssue += "'Symbols' is ignored while Pair inputs are on; ";
+   if(!listed)
      {
       PrintFormat("Symbols: %s", g_symbolIssue == "" ? "no symbol to trade" : g_symbolIssue);
       return INIT_PARAMETERS_INCORRECT;
@@ -1557,7 +1614,17 @@ double OnTester()
    if(InpReportResults)
      {
       string build  = EA_VERSION + " " + EA_BUILD;
+      // engines with their own settings (profile / Pair inputs) report their own config
       string config = ConfigSummary(g_cfg);
+      bool own = false;
+      for(int e = 0; e < ArraySize(g_engines); e++)
+         own = own || g_engines[e].profile != "";
+      if(own)
+        {
+         config = "";
+         for(int e = 0; e < ArraySize(g_engines); e++)
+            config += (e > 0 ? " | " : "") + g_engines[e].symbol + "{" + ConfigSummary(g_engines[e].cfg) + "}";
+        }
       string label  = SymbolsLabel("+");
       CTestReporter::WriteConsistency(label, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, daily);
       CTestReporter::WriteSummary(label, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, score);
