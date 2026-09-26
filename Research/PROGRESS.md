@@ -678,3 +678,13 @@ S2 median $55 (0% tradable at 1%) → small accounts = scalper only.
 | Final_Top1 | Scalper + S2 + S3 H2 | 0.8% | – |
 | Final_Lowest_DD | S2 + S3 H2 | 0.4% | – |
 Combos (scalper + swing) are untested together – verify with real ticks before use.
+
+**Final sets – first real-tick runs:** Cash1k HighRisk (3%) +$2,027 (+203%) DD 11% · Cash1k LowRisk +$166 ·
+$200/day at 0.8% on $1k only +$78 (swing stops $30–55 per 0.01 lot > 0.8% of $1k → skipped; target never hit) ·
+Prop Aggressive +76.6k PF 1.64 DD 4.29% max loss 0.90% · Prop LowRisk +18.3k PF 2.68 DD 1.86% ·
+Top1 +44.8k PF 1.53 DD 4.43% · Lowest DD +11.8k PF 2.64 DD 1.36%.
+
+## Round 21 – $200/day on $1k, high risk (user: no rules, many intraday trades)
+- Final_Cash_200PerDay rebuilt: R19_B_more scalper at **10% risk**, compounding, stop day at +$200 / −30%.
+- Round21_Cash200_HighRisk: Round 20 ranges, deposit $1k, risk 2–20% per engine, daily loss 10–60%,
+  target $200/day fixed, min 400 trades, criterion **net profit**. Genetic, 1-min OHLC.
