@@ -780,3 +780,8 @@ settings per pair).
 - First Round29_PairsCheck run was on a **$100k** deposit (not $1k) → +1,307, not comparable. It did show that MT5 cuts a
   string input at **255 chars incl. "InpPairN_SK="** (243 left): 2 items were cut (`P_TPMo`, `I_Max`) and the health check
   caught them. Fix: make_portfolio.py chunks at 240, EA warns on any settings field ≥ 243 chars. Set regenerated.
+**Round29_PairsCheck result (v4.52, $1k, real ticks):** +12,216.98 → **$13,216.98, PF 1.71, DD 29.1%, 187 trades – identical
+to New_1k_1 ✅**. The pair-settings path reproduces a full set through 68 text settings. That run still had the old
+250-char fields: MT5 cut fields 2/3 at 243 chars (lost P_TPMode, I_MaxSlAtr – disabled strategies, so no effect) and
+the new truncation check flagged it. Sets are now built with ≤ 240-char fields. (A first run at $100k deposit,
++1,307 PF 1.01, is not comparable – wrong deposit.)
