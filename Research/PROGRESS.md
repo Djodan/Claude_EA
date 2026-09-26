@@ -730,3 +730,12 @@ Non-gold pairs untested with these settings.
 New_1k_1 = Final_Cash_200PerDay with every v4.40+ input pinned to the old behaviour (chart symbol only, no
 profiles/activity/ATR spread, news USD) – must reproduce $1k → $13,216.98. New_1k_2 = same with the daily
 target at 20% of balance (the Scaled idea, now with the target actually applied).
+
+## New prop sets (max loss per trade ≤ 0.8%)
+Worst trade in R (archive, real ticks): scalper R19_A 1.05R (0.84% @0.8, 0.734% @0.7) · Top_2 (S2+S3 H2) 1.02R
+(0.602% @0.6) · Top_1 swing (S2+S3 M15) 1.64–1.67R · best_2025_2026 S2 0.99R (0.795% @0.8).
+Only best_2025_2026 is proven in both years (2025 PF 1.47, 2026 PF 2.59); everything else is 2026-only.
+- **New_Prop_High_Risk** = Prop Aggressive (scalper + S2/S3 M15, real ticks +76.6k PF 1.64 DD 4.29%) with scalper
+  0.7% and swing 0.45% → worst trade ≈ 0.74%; day stop −3%. Expect ≈ +60k, DD ≈ 3.5–4%.
+- **New_Prop_Low_Risk** = Top_2 at 0.6% exactly as tested: +18.3k PF 2.68 DD 1.86% worst 0.60%; day stop −2%.
+Both pin the v4.40+ inputs to single-gold behaviour. To do: run both on 2025 (out-of-sample).
