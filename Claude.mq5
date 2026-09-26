@@ -30,7 +30,7 @@
 //|  Research/PROGRESS.md tracks backtest rounds and conclusions.    |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.20"
+#define EA_VERSION "4.30"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -67,6 +67,7 @@
 #include "Modules/Manage/ManagePartialClose.mqh"
 #include "Modules/Manage/ManageTimeExit.mqh"
 #include "Modules/Manage/ManageSessionClose.mqh"
+#include "Modules/Manage/ManageWeekendClose.mqh"
 #include "Modules/Manage/ManageNewsExit.mqh"
 #include "Modules/Notify/AlertManager.mqh"
 #include "Modules/Visual/ChartDrawer.mqh"
@@ -92,6 +93,8 @@ input ENUM_LOT_MODE      InpLotMode       = LOT_RISK_PERCENT; // Lot mode
 input double             InpFixedLots     = 0.10;           // Fixed lots
 input double             InpRiskPercent   = 0.8;            // Risk % per trade (prop rule: max loss 1%)
 input bool               InpAllowHedge    = false;          // Allow opposite positions (prop: no hedging)
+input bool               InpWeekendClose  = true;           // Close all positions before the weekend (Monday gaps break the 1% rule)
+input int                InpWeekendHour   = 22;             // Friday close hour (ref GMT+2/+3; also 5 min before broker Friday end)
 input double             InpAccountSize   = 100000;         // Account size cap for risk (prop size, 0 = off)
 
 input group "=== S1 Trend: DJ Trend flip ==="
@@ -657,6 +660,8 @@ void BuildConfig(SEAConfig &c)
    c.risk.fixedLots   = InpFixedLots;
    c.risk.riskPercent = InpRiskPercent;
    c.risk.accountSize = InpAccountSize;
+   c.weekendClose     = InpWeekendClose;
+   c.weekendHour      = InpWeekendHour;
 
    //--- guards
    c.useSession          = InpUseSession;
@@ -718,6 +723,12 @@ void AddExits(CStrategy *st, const SExitSettings &e)
      {
       CManageSessionClose *m = new CManageSessionClose();
       m.Configure(e.closeHour, e.closeMinute);
+      st.AddPositionModule(m);
+     }
+   if(g_cfg.weekendClose)
+     {
+      CManageWeekendClose *m = new CManageWeekendClose();
+      m.Configure(g_cfg.weekendHour);
       st.AddPositionModule(m);
      }
    if(e.newsExitMins > 0)

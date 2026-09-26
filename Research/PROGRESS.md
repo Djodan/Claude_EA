@@ -647,3 +647,15 @@ exits, trend filters, news guard on/off + minutes, spread limit, cooldown, max p
 guard off (caps come later). Criterion TC_PROFIT_DD_PCT, min 30 trades.
 Run: genetic, 1-min OHLC, 2026.01.01–2026.09.21, XAUUSD M1, $100k. Genetic = guided sample, not
 exhaustive – rerun 2–3× (results differ per run) and compare the top clusters.
+
+**Round 20 halfway – real-tick single runs (4,280 passes in):**
+| Set | Net | PF | DD | Trades | Max loss | Best day |
+|---|---|---|---|---|---|---|
+| Top_1 (S2+S3 M15+S4) | +77.3k | 1.73 | 6.2% | 309 | **1.34%** ❌ | 11.4% |
+| Top_2 (S2+S3 H2+S6) | +24.6k | 2.47 | 2.4% | 135 | 0.82% | 13.7% |
+| Top_3 (S1+S2+S5+S8) | +40.4k | 1.34 | 5.1% | 864 | **1.16%** ❌ | 10.4% |
+Real ticks ≈ 1-min OHLC scores. Per strategy: **S3 Pullback M15 +63.2k PF 1.92** (new star), S2 PF 2.4–3.5,
+S1 PF 1.25, S5 PF 1.41; losers S4 (−0.9k), S6 (−0.1k), S8 (−0.7k).
+>1% losses = S1/S3 holding over the weekend (Fri 20:00 short, Monday gap −1.47R).
+**v4.30:** `InpWeekendClose` (default on) + `InpWeekendHour` 22 – every strategy flat Friday 22:00 ref
+(or 5 min before broker Friday end). Retest sets: Halfway_Top_1_fix (no S4), _2_fix (no S6), _3_fix (no S8).

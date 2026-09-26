@@ -159,6 +159,8 @@ struct SEAConfig
    SBreakoutConfig   ny;                   // S4: NY opening-range breakout
    SPullbackConfig   pb;
    SRiskSettings     risk;                 // shared sizing
+   bool              weekendClose;         // flat before the weekend (all strategies)
+   int               weekendHour;          // Friday close hour, reference time
    //--- shared guards
    bool              useSession;
    SGuardSessionSettings session;
@@ -297,7 +299,7 @@ string ConfigSummary(const SEAConfig &c)
       s += StringFormat("P[%s %d/%d RSI%d %.0f/%.0f%s] ", TfName(c.pb.s.tf), c.pb.pb.fastLen, c.pb.pb.slowLen,
                         c.pb.pb.rsiLen, c.pb.pb.rsiLow, c.pb.pb.rsiHigh, ExitSummary(c.pb.s));
    if(c.risk.lotMode == LOT_RISK_PERCENT)
-      s += StringFormat("risk%.2f%%", c.risk.riskPercent) + (c.risk.accountSize > 0.0 ? StringFormat(" cap%.0f", c.risk.accountSize) : "");
+      s += StringFormat("risk%.2f%%", c.risk.riskPercent) + (c.risk.accountSize > 0.0 ? StringFormat(" cap%.0f", c.risk.accountSize) : "") + (c.weekendClose ? StringFormat(" WK%d", c.weekendHour) : "");
    else
       s += StringFormat("lots%.2f", c.risk.fixedLots);
    if(c.useNews)
