@@ -819,3 +819,13 @@ Account-level input – not written into Pair settings by make_portfolio.py.
 **New1_ sets** = New_1k_1, New_1k_2, New_Prop_High_Risk, New_Prop_Low_Risk regenerated for v4.53: every old value
 identical (verified), the 31 new inputs at their "off" defaults (Pairs off, open-risk cap 0) → same trading as before.
 Regression: New1_1k_1 must give $13,216.98, New1_Prop_Low_Risk +18,320.43, New1_Prop_High_Risk +64,630.56.
+
+## Round 31 – New1_1k_2 improvement search ($1k, scalper, 20%/day target)
+Baseline New1_1k_2 (real ticks 2026): +36,271 PF 1.29 DD 36.5%, 305 trades, criterion ≈ 1,057 (profit / DD%).
+`Round31_1k2_Optimize` = New1_1k_2 with 36 inputs optimised (start values = New1_1k_2, so a single run = baseline):
+sizing & day limits (scalper risk 2–15%, day target 0–40%, day loss 10–40%) · engines (preset 12 MR / 13 MO / 14 both) ·
+TF M1–M15 · window start 0–12 / end 12–23 · EOD 18–23 · time exit 0–120 bars · BE · Asian-bias on/off · max/day ·
+cooldown · news exit/guard/before/after · Asian range hours · all MR (BB, RSI, stop, target, max ADX) and MO (body,
+close %, stop mode, TP 0.3–2R, trend TF/EMA) inputs · spread limit 0.3–1.2. Criterion TC_PROFIT_DD_PCT, min 150 trades.
+Run: XAUUSD M1, $1k, 2026.01.01–2026.09.21, 1-min OHLC, fast genetic, Custom max (2–3 runs). Verify top passes on real
+ticks (1-min OHLC is optimistic for M1–M3 scalps) and on 2025.
