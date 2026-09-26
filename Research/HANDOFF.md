@@ -34,6 +34,9 @@ Shell notes: Git Bash; bash heredoc `python - <<'EOF'` works (never add `</dev/n
 it closed; always compile yourself. MT5 terminal is usually open → cannot run the tester from the CLI; the
 user runs tests and reports "results are ready" → read the CSVs / HTML / XML yourself.
 
+- **Tester maps cached inputs by POSITION after a recompile**: inserting an input shifts every later value (v4.53: preset 1,
+  "ASIS_TYPE::2814", all Pairs on without symbols). Always re-select the EA + Load the set; add NEW inputs at the END.
+
 ## 3. Architecture (v4.53)
 ```
 inputs ──BuildConfig──► SEAConfig g_cfg ──ApplyPreset──► per symbol: CSymbolEngine
