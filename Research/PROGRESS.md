@@ -659,3 +659,22 @@ S1 PF 1.25, S5 PF 1.41; losers S4 (−0.9k), S6 (−0.1k), S8 (−0.7k).
 >1% losses = S1/S3 holding over the weekend (Fri 20:00 short, Monday gap −1.47R).
 **v4.30:** `InpWeekendClose` (default on) + `InpWeekendHour` 22 – every strategy flat Friday 22:00 ref
 (or 5 min before broker Friday end). Retest sets: Halfway_Top_1_fix (no S4), _2_fix (no S6), _3_fix (no S8).
+
+**Fix runs (v4.30, real ticks):** Top_1_fix +69.9k PF 1.93 DD 6.72% max loss **1.34%** (not the weekend –
+an intraday gap; worst day unchanged) · **Top_2_fix +24.3k PF 2.61 DD 2.59% max loss 0.82%** · Top_3_fix
++29.8k PF 1.26 DD 5.63% max loss 0.84% (S1 drops to PF 1.13 without weekend holds).
+R19 real ticks: **R19_A_best +38.5k PF 1.80 DD 2.80% max loss 0.84% best day 6.6%, $331/day** – holds up;
+R19_D (497 tr) PF 1.20. $1k feasibility: scalper stop median $2.8 per 0.01 lot (97% tradable at 1%),
+S2 median $55 (0% tradable at 1%) → small accounts = scalper only.
+
+## Final sets (Research/sets/Final_*.set, all v4.30, XAUUSD M1, weekend close on)
+| Set | Engines | Risk | Guards |
+|---|---|---|---|
+| Final_Cash1k_Scalp_HighRisk | Scalper (R19_A) | 3% compounding | daily loss 10% |
+| Final_Cash1k_Scalp_LowRisk | Scalper | 1% compounding | daily loss 4% |
+| Final_Cash_200PerDay | Scalper + S2 + S3 H2 | 0.8% compounding | stop at +$200/day, daily loss 3% |
+| Final_Prop_Challenge_Aggressive | Scalper + S2 + S3 M15 (Top_1) | scalp 0.8, swing 0.55 (1.67R worst → 0.92%) | daily loss 4% |
+| Final_Prop_LowRisk_Maintain | S2 + S3 H2 (Top_2) | 0.6% | daily loss 2% |
+| Final_Top1 | Scalper + S2 + S3 H2 | 0.8% | – |
+| Final_Lowest_DD | S2 + S3 H2 | 0.4% | – |
+Combos (scalper + swing) are untested together – verify with real ticks before use.
