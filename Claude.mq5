@@ -35,7 +35,7 @@
 //|  text, so a whole multi-pair portfolio lives in one .set file.   |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.52"
+#define EA_VERSION "4.53"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -105,6 +105,7 @@ input bool               InpAllowHedge    = false;          // Allow opposite po
 input bool               InpWeekendClose  = true;           // Close all positions before the weekend (Monday gaps break the 1% rule)
 input int                InpWeekendHour   = 22;             // Friday close hour (ref GMT+2/+3; also 5 min before broker Friday end)
 input double             InpAccountSize   = 100000;         // Account size cap for risk (prop size, 0 = off)
+input double             InpMaxOpenRiskPct= 0;              // Max combined open risk % to the stops, all pairs (0 = off) - new trades cut to fit
 
 input group "=== Symbols (multi-pair) ==="
 input string             InpSymbols       = "";             // Symbols, comma-separated ("" = chart symbol). Overrides: EURUSD:spread=0.0002;slip=0.0003;risk=0.5;srisk=0.3
@@ -733,6 +734,8 @@ void BuildConfig(SEAConfig &c)
    c.risk.fixedLots   = PD("InpFixedLots", InpFixedLots);
    c.risk.riskPercent = PD("InpRiskPercent", InpRiskPercent);
    c.risk.accountSize = PD("InpAccountSize", InpAccountSize);
+   c.risk.maxOpenRiskPct = PD("InpMaxOpenRiskPct", InpMaxOpenRiskPct);
+   c.risk.magicBase   = InpMagic;
    c.weekendClose     = PB("InpWeekendClose", InpWeekendClose);
    c.weekendHour      = (int)PL("InpWeekendHour", InpWeekendHour);
 
@@ -1341,7 +1344,10 @@ void CheckHealth(string &txt[], color &clr[])
       AddHealth(txt, clr, HEALTH_OK, StringFormat("Risk %.2f%% = %.0f %s per trade, %s", g_cfg.risk.riskPercent,
                                                   base * g_cfg.risk.riskPercent / 100.0, AccountInfoString(ACCOUNT_CURRENCY),
                                                   (InpAllowHedge ? "hedging allowed" : "no hedging") +
-                                                  (multi ? StringFormat(", %d symbols", ArraySize(g_engines)) : "")));
+                                                  (multi ? StringFormat(", %d symbols", ArraySize(g_engines)) : "") +
+                                                  (g_cfg.risk.maxOpenRiskPct > 0.0 ? StringFormat(", open risk max %.2f%%", g_cfg.risk.maxOpenRiskPct) : "")));
+   if(multi && g_cfg.risk.lotMode == LOT_RISK_PERCENT && g_cfg.risk.maxOpenRiskPct <= 0.0)
+      AddHealth(txt, clr, HEALTH_WARN, "Several pairs without 'Max combined open risk' - their risks add up");
      }
    bool allOk = ArraySize(txt) > 0;
    for(int i = 0; i < ArraySize(txt); i++)

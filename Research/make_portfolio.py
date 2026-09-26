@@ -22,7 +22,7 @@ EA_FILE = HERE.parent / "Claude.mq5"
 TESTER = HERE.parent.parent.parent / "Profiles" / "Tester"
 MAX_PAIRS, PARTS = 5, 4
 # inputs that are the same for every pair (chart / account level) - never written into pair settings
-GLOBAL = re.compile(r"^Inp(Pair\d|Symbols$|SymbolSlot$|UseProfiles$|ServerTZ$|Magic$|Alert|Draw|BuyColor$|SellColor$|"
+GLOBAL = re.compile(r"^Inp(Pair\d|MaxOpenRiskPct$|Symbols$|SymbolSlot$|UseProfiles$|ServerTZ$|Magic$|Alert|Draw|BuyColor$|SellColor$|"
                     r"FontSize$|ShowDashboard$|Criterion$|MinTrades$|ReportResults$|ExportTrades$|NewsExport$|NewsFrom$)")
 
 

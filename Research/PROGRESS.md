@@ -809,3 +809,13 @@ optimisation: 161 trades, +$31, PF 1.10, win 44.7%, max loss 0.51% – no edge. 
 breakout fires in the same window as gold's Asian breakout (same idea, both USD-quoted), so gold S2 0.45% / scalper 0.7% +
 GBPUSD ≥ 0.5% open together could exceed 1% on one trade idea. Portfolio now: XAUUSD, USDJPY, EURGBP, BITCOIN.
 Open point: USDJPY and gold are both USD bets (long gold ≈ short USDJPY) → a combined open-risk cap is needed (v4.53 idea).
+
+## v4.53 – combined open-risk cap (prop: max 1% per trade idea across correlated pairs)
+`InpMaxOpenRiskPct` (0 = off): before every entry the EA adds up the loss to the stops of ALL its open positions
+(every symbol, magic base..+99; breakeven / locked stops count 0) plus the new trade. Above the cap (% of the sizing
+base = min(balance, equity, account-size cap)) the new trade is cut to fit, or skipped if that is below the minimum lot
+(reason shown on the dashboard). Config summary " ORC1.00"; health warns when several pairs run without a cap.
+Account-level input – not written into Pair settings by make_portfolio.py.
+**New1_ sets** = New_1k_1, New_1k_2, New_Prop_High_Risk, New_Prop_Low_Risk regenerated for v4.53: every old value
+identical (verified), the 31 new inputs at their "off" defaults (Pairs off, open-risk cap 0) → same trading as before.
+Regression: New1_1k_1 must give $13,216.98, New1_Prop_Low_Risk +18,320.43, New1_Prop_High_Risk +64,630.56.
