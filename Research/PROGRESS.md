@@ -688,3 +688,8 @@ Top1 +44.8k PF 1.53 DD 4.43% · Lowest DD +11.8k PF 2.64 DD 1.36%.
 - Final_Cash_200PerDay rebuilt: R19_B_more scalper at **10% risk**, compounding, stop day at +$200 / −30%.
 - Round21_Cash200_HighRisk: Round 20 ranges, deposit $1k, risk 2–20% per engine, daily loss 10–60%,
   target $200/day fixed, min 400 trades, criterion **net profit**. Genetic, 1-min OHLC.
+
+**Round 21 results:** Final_Cash_200PerDay (real ticks, $1k, 10% risk): **$1,000 → $13,217 (+1,222%)**, PF 1.71,
+187 trades, equity DD 29%, largest loss −$1,249. **86 of 130 trading days ≥ $200** (Jan 3/12 while the account
+was small, May–Sep 10–15 per month); Aug −$314 was the only losing month.
+Round21 optimisation set was run as a single test (code defaults: risk 0.8, S1/S2/S3 on) → −$569, not a result.
