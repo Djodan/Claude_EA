@@ -837,3 +837,12 @@ prop-safe sizing (S2/S3 risk 0.2–0.6%, scalper 0.3–0.8%) + day stop 2–4% �
 last entry, buffer, max range, TP 1.5–4.5R, BE, trend filter, EOD, news exit, retry) · S3 (TF M5–H4, EMAs, RSI levels,
 SL/TP, time exit) · scalper (TF, window, EOD, time exit, Asian bias, news exit, key MR/MO inputs) · news window, spread.
 Criterion TC_PROFIT_DD_PCT, min 100 trades. Filter passes on consistency.csv: max_loss_pct ≤ 0.8, best-day share ≤ 40%.
+
+## Round 33 – NAS100Z6 (Nasdaq Dec-26 CFD on Alpari → copied to MNQ futures prop), prop set
+User copies MT5 trades to NinjaTrader/Tradovate MNQ. Account **$50k** (futures props: ~4–5% trailing DD on 50k vs ~3% on
+100k, cheaper; MNQ $2/pt → fine sizing). `Round33_NAS100_Prop` = New1_Prop_High_Risk structure, 72 inputs optimised:
+risk S1–S4 0.2–0.6%, scalper 0.2–0.8%, day stop 1–3% · S1 trend / S2 range breakout / **S4 NY opening-range breakout**
+(16:00–17:30 ref = 09:00–10:30 NY, 5–60 min) / S3 pullback / S7 / S8 each on/off · S2 range hours widened (start 0–10,
+end 6–16 → Asian or pre-US-open range) · spread limit as % of D1 ATR (0.5–4%, index-scale-free), slippage 5 pts ·
+news USD. Criterion TC_PROFIT_DD_PCT, min 50 trades. Caveat: only one contract month of data (2026) – Alpari's Z6
+history length unknown; rollover to H7 later needs the same test on the new contract.
