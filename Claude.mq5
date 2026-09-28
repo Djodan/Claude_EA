@@ -35,7 +35,7 @@
 //|  text, so a whole multi-pair portfolio lives in one .set file.   |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.53"
+#define EA_VERSION "4.54"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -362,6 +362,9 @@ input ENUM_TESTER_CRITERION InpCriterion  = TC_PROFIT_DD_PCT; // Custom optimisa
 input int                InpMinTrades     = 30;             // Min trades for a valid pass
 input bool               InpReportResults = true;           // Write results CSVs (Common\Files\ClaudeEA)
 input bool               InpExportTrades  = true;           // Export trade list (single runs)
+
+input group "=== Prop rules (v4.54) ==="
+input int                InpFlatHour      = 0;              // Flat daily at this ref hour, ALL strategies (0 = off; futures props: 23 = 16:00 New York)
 
 //--- Globals --------------------------------------------------------
 SEAConfig        g_cfg;                 // inputs + preset; each engine holds a copy with its symbol overrides
@@ -738,6 +741,7 @@ void BuildConfig(SEAConfig &c)
    c.risk.magicBase   = InpMagic;
    c.weekendClose     = PB("InpWeekendClose", InpWeekendClose);
    c.weekendHour      = (int)PL("InpWeekendHour", InpWeekendHour);
+   c.flatHour         = (int)PL("InpFlatHour", InpFlatHour);
 
    //--- guards
    c.useSession          = PB("InpUseSession", InpUseSession);
@@ -803,6 +807,13 @@ void AddExits(CStrategy *st, const SExitSettings &e)
      {
       CManageSessionClose *m = new CManageSessionClose();
       m.Configure(e.closeHour, e.closeMinute);
+      st.AddPositionModule(m);
+     }
+   if(g_eng.cfg.flatHour > 0)
+     {
+      // prop rule: no strategy holds past this hour (S1/S3 have no own daily close)
+      CManageSessionClose *m = new CManageSessionClose();
+      m.Configure(g_eng.cfg.flatHour, 0);
       st.AddPositionModule(m);
      }
    if(g_eng.cfg.weekendClose)

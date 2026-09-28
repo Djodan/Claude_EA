@@ -858,3 +858,12 @@ M1** (free, 2025 full year + Jan–Sep 2026 monthly zips, downloaded in Chrome) 
 Import: script `Claude_ImportCustom` (MQL5\Scripts, source in Research/data) creates `NAS100_CONT` (Custom\Claude,
 MNQ spec: 1 lot = 1 contract = $2/point, min 1, step 1) and loads Common\Files\ClaudeEA\data\NAS100_CONT_M1.csv.
 Note: 1 MNQ minimum → with 0.45% of $50k ($225) stops wider than ~112 points are skipped (realistic for MNQ).
+
+## v4.54 – daily flat hour + Round 34 (NAS100_CONT, $50k futures prop)
+`InpFlatHour` (new group "Prop rules", LAST input so cached tester values don't shift; 0 = off): every strategy closes
+at this ref hour (S1 trend / S3 pullback had no daily close → could hold overnight; futures props: flat by 16:10 NY).
+All current sets regenerated with InpFlatHour=0 (behaviour unchanged).
+**Round34_NAS100_50k_Prop** = Round33 on the custom symbol, 72 inputs: $50k cap, combined open risk ≤ 1% (all
+engines trade one market = one idea), risk 0.2–0.8% per engine (MNQ 1-contract minimum needs room), day stop 1–3%,
+flat 23 (16:00 NY), entries 01–23 ref (session guard, Mon–Fri), EOD hours ≤ 22, min 100 trades.
+Run: NAS100_CONT M1, 2025.01.01–2026.09.25, forward custom 2026.05.01, $50k, 1-min OHLC, fast genetic, Custom max.

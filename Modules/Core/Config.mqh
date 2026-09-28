@@ -161,6 +161,7 @@ struct SEAConfig
    SRiskSettings     risk;                 // shared sizing
    bool              weekendClose;         // flat before the weekend (all strategies)
    int               weekendHour;          // Friday close hour, reference time
+   int               flatHour;             // close every position daily at this ref hour, all strategies (0 = off)
    //--- shared guards
    bool              useSession;
    SGuardSessionSettings session;
@@ -320,6 +321,8 @@ string ConfigSummary(const SEAConfig &c)
       s += c.maxSpread >= 0.01 || c.maxSpread == 0.0 ? StringFormat(" SPR%.2f", c.maxSpread) : StringFormat(" SPR%.5f", c.maxSpread);   // FX pips
    if(c.useActivity)
       s += StringFormat(" ACT%.2f", c.activityMin);
+   if(c.flatHour > 0)
+      s += StringFormat(" FLAT%d", c.flatHour);
    if(c.risk.maxOpenRiskPct > 0.0)
       s += StringFormat(" ORC%.2f", c.risk.maxOpenRiskPct);
    return s;
