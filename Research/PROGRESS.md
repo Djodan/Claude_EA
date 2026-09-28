@@ -846,3 +846,15 @@ risk S1–S4 0.2–0.6%, scalper 0.2–0.8%, day stop 1–3% · S1 trend / S2 ra
 end 6–16 → Asian or pre-US-open range) · spread limit as % of D1 ATR (0.5–4%, index-scale-free), slippage 5 pts ·
 news USD. Criterion TC_PROFIT_DD_PCT, min 50 trades. Caveat: only one contract month of data (2026) – Alpari's Z6
 history length unknown; rollover to H7 later needs the same test on the new contract.
+
+## NAS100 data for backtests (custom symbol NAS100_CONT)
+Alpari only has NAS100Z6 (15 Sep – 18 Dec 2026). Dukascopy tick feed throttles scripts (~1 file/min → a week for 21
+months) – `Research/data/duka_download.py` / `duka_convert.py` kept for small tick windows. Used **HistData.com NSXUSD
+M1** (free, 2025 full year + Jan–Sep 2026 monthly zips, downloaded in Chrome) → `Research/data/histdata_convert.py`:
+591,322 M1 bars 2025-01-02 .. 2026-09-25, EST(no DST) → UTC → NY-close server time. Check: largest 1-min range at
+16:30 server (09:30 New York) in winter and summer ✓. Quirk: summer data restarts 02:00 server after the daily break
+(01:00 in winter). Spread fixed 50 points (0.50 index pts, conservative vs MNQ 0.25); no real ticks → optimise with
+"1 minute OHLC"; real-tick checks later on Alpari NAS100Z6 (from 15 Sep 2026).
+Import: script `Claude_ImportCustom` (MQL5\Scripts, source in Research/data) creates `NAS100_CONT` (Custom\Claude,
+MNQ spec: 1 lot = 1 contract = $2/point, min 1, step 1) and loads Common\Files\ClaudeEA\data\NAS100_CONT_M1.csv.
+Note: 1 MNQ minimum → with 0.45% of $50k ($225) stops wider than ~112 points are skipped (realistic for MNQ).
