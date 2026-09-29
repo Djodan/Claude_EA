@@ -895,3 +895,12 @@ risks up to 0.8% (max loss per trade not measured), 1-min OHLC, 2026 only.
 Each = New1_Prop_High_Risk + one change (diff verified): A S2 stop MID · B + S2 news exit 25 · C + S1 M5 trend (90 h top
 settings, 0.45%) · D = B + entries allowed right after news (NewsAfter 0). Baseline +64,630 PF 1.64 DD 3.78% worst 0.746%.
 Keep a change only if PF/DD improve AND worst trade ≤ 0.8% AND best day ≤ 40%; then 2025 out-of-sample.
+
+## Round 37 – optimisation around New(1)_Prop_High_Risk and New(1)_1k_2, widened with the 90 h findings
+Start values = the baseline set (a single run reproduces it); v4.54, all new inputs off.
+- `Round37_PropHigh_Optimize` (62 inputs) = Round32 (50) + S2 stop mode (range/mid) + S1 trend on/off with TF M5–M30,
+  MA type, length, buffer, SL, vol/ADX filters + scalper cooldown + MR regime TF. $100k, min 100 trades.
+  Filter passes afterwards: max_loss_pct ≤ 0.8, best-day share ≤ 40% (consistency.csv).
+- `Round37_1k2_Optimize` (40 inputs) = Round31 (36) + second (overnight) scalp window, MR regime TF, ATR length,
+  longer cooldown. $1k, min 150 trades.
+Both: XAUUSD M1, 2026.01.01–2026.09.21, 1-min OHLC, fast genetic, Custom max; verify top passes on real ticks + 2025.
