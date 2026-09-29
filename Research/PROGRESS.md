@@ -918,3 +918,8 @@ criterion, net_profit, trades, PF, DD, and ALL 243 inputs as `InpX=v;...` (gener
 [--from ...]` rebuilds the exact .set of any pass. Candidate sets from the XML were deleted.
 **Round 36** = Round35 set unchanged, run correctly: re-import NAS100_CONT (1.00-pt costs), 2025.01.01–2026.09.25,
 forward 2026.05.01.
+**Round36_NAS50k_A/B/C** – the 3 best Round-35 passes (both halves profitable) rebuilt from the EA's own config log
+(results.csv), not the XML; every optimised input that matters is in the summary (missing ones belong to disabled
+engines / unused TP modes). Forward (Jul–Sep 2026, 0.50-pt costs): A +5,113 PF 1.34 DD 1.58% 383 tr (T+B+N+MR+MO+P, M6/M10);
+B +4,520 PF 1.40 DD 1.57% 295 tr; C +2,524 PF 1.52 DD 0.92% 115 tr (T+B+MO M20+P H3). Single-test them with the
+1.00-pt data on 2025.01.01–2026.09.25 for the realistic yield.
