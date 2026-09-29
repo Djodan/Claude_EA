@@ -876,3 +876,22 @@ PF 1.46 DD 1.25%. DJ Trend M12–M15 (S1) is in almost every robust pass → tre
 **Round 35** fixes costs + resolution: NAS100_CONT bars rebuilt with spread **100 points = 1.00 pt** (MNQ spread 0.25 +
 commission ≈ 0.62 + slippage); scalp TF ≥ M5, momentum TP ≥ 0.5R. Set Round35_NAS100_50k_Prop (else = Round34).
 Re-import with Claude_ImportCustom before running.
+
+## Round 20 final – 90 h "everything" genetic run (VPS, v4.20, 1-min OHLC, 38,314 passes)
+File: Profiles\Tester\XAUUSD_90H_OptResults.xml (243 MB, not in repo). Caveats: v4.20 = **no weekend close**, all
+risks up to 0.8% (max loss per trade not measured), 1-min OHLC, 2026 only.
+- Best: custom 97,557 = +$320k PF 1.82 DD 3.3%, 1,156 trades, engines S1+S2+S3+S5+S7+S4 (MR scalper, no momentum).
+  The genetic run collapsed onto ONE cluster (top 500 identical engines/most settings) → heavy fit, not proof.
+- Quality vs frequency: 100–300 trades PF 2.43 · 300–600 PF 2.26 (S1+S2+S3) · 600–1,000 PF 1.85 · 1,000–1,500 PF 1.82 · 1,500+ PF 1.60.
+- **Matched-pair analysis** (passes identical except one input – removes the genetic bias):
+  - **S2 stop at range MIDPOINT beats opposite side: better in 95% of 259 pairs** (median +2,677) – strongest clean signal.
+  - S2 news exit 25 min > 10 min (16/16); TP 3.75–4R best (S2 core = New1_Prop_High_Risk, confirmed again).
+  - S1 Trend on M5 (ALMA 88, x0.2, SL 3.5 ATR, vol ≥ 1.1, no TP) +62.9k in 6/6 pairs – BUT S1 profits relied on
+    weekend holds before (Top_3 → Top_3_fix: S1 PF 1.25 → 1.13), so unproven under v4.30+ weekend close.
+  - Blocking entries 30 min AFTER news: worse in 11/11 pairs (−11.5k median).
+  - Momentum scalper (S8) off in every top pass; scalper-only passes weak (best custom 4.3k) → nothing reliable for New1_1k_2
+    (its own search: Round31).
+## Round 36 – verify the 90 h findings on New1_Prop_High_Risk (single real-tick runs, $100k, 2026)
+Each = New1_Prop_High_Risk + one change (diff verified): A S2 stop MID · B + S2 news exit 25 · C + S1 M5 trend (90 h top
+settings, 0.45%) · D = B + entries allowed right after news (NewsAfter 0). Baseline +64,630 PF 1.64 DD 3.78% worst 0.746%.
+Keep a change only if PF/DD improve AND worst trade ≤ 0.8% AND best day ≤ 40%; then 2025 out-of-sample.
