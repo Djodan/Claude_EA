@@ -867,3 +867,12 @@ All current sets regenerated with InpFlatHour=0 (behaviour unchanged).
 engines trade one market = one idea), risk 0.2–0.8% per engine (MNQ 1-contract minimum needs room), day stop 1–3%,
 flat 23 (16:00 NY), entries 01–23 ref (session guard, Mon–Fri), EOD hours ≤ 22, min 100 trades.
 Run: NAS100_CONT M1, 2025.01.01–2026.09.25, forward custom 2026.05.01, $50k, 1-min OHLC, fast genetic, Custom max.
+**Round 34 results (MnQ_2H_Opt_Results.xml, 10,276 passes, forward from 2026-05-01):** top ~200 passes = M1 momentum
+scalp (S8, TP 0.3R) with ~18,000 trades in 5 months (+$71.7k, PF 1.24, DD 1.1%) – ❌ artefact: 1-min OHLC on bar data
+(4 ticks/bar) + no commission. MNQ ≈ $1.24/contract round trip → ~18k trades × ~10 contracts ≈ $220k costs. Without
+M1–M3 scalps (1,882 passes ≤ 15 trades/day): only 425 forward-positive; best on both halves e.g. #3283 T M15 + K M15
+fwd +2.8k PF 1.49 DD 0.39% (552 tr), #2513 T M15 + M + K M15 fwd +8.2k PF 1.28 DD 1.41%, #2979 T + N + K M15 fwd +6.3k
+PF 1.46 DD 1.25%. DJ Trend M12–M15 (S1) is in almost every robust pass → trend-following carries NQ.
+**Round 35** fixes costs + resolution: NAS100_CONT bars rebuilt with spread **100 points = 1.00 pt** (MNQ spread 0.25 +
+commission ≈ 0.62 + slippage); scalp TF ≥ M5, momentum TP ≥ 0.5R. Set Round35_NAS100_50k_Prop (else = Round34).
+Re-import with Claude_ImportCustom before running.
