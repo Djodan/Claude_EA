@@ -86,6 +86,12 @@ CStrategy     = signal modules (1 TRIGGER + FILTERs) + CTradeManager + CRiskMana
 - **v4.53 `InpMaxOpenRiskPct`**: combined open risk to the stops across all pairs; new trades cut to fit / skipped (prop 1% per idea).
 - Everything else is scale-free (ATR/R-based). Settings are tuned on XAUUSD only – other pairs untested.
 
+- **v4.55 inputs.csv**: every tester pass logs its exact inputs (Common\Files\ClaudeEA\inputs.csv). Build a set from any
+  pass: `python Research/set_from_inputs.py <Name> --criterion <Custom value> [--from yyyy.mm.dd]`. Don't trust the
+  forward-tab XML's parameter columns (Round 35). After adding inputs: `python Research/gen_inputs_dump.py` + recompile.
+- NAS100: custom symbol NAS100_CONT from HistData M1 (Research/data/, see PROGRESS "NAS100 data"), MNQ spec, costs as a
+  1.00-pt spread; re-run the MT5 script Claude_ImportCustom after rebuilding the CSV.
+
 ## 4. Creating sets – `Research/make_set.py`
 The tester caches inputs in `Profiles/Tester/Claude.set`; **always load a generated .set and re-select the EA after
 a recompile** (otherwise new inputs are missing → e.g. the "Scaled" run silently had no daily target).

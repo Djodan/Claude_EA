@@ -80,6 +80,24 @@ public:
       FileClose(h);
      }
 
+   //--- one row per pass: the EXACT inputs (tab-separated; the forward-results XML can show wrong values)
+   static void       WriteInputs(const string symbol, const datetime from, const datetime to, const string build,
+                                 const double score, const string inputs)
+     {
+      FolderCreate("ClaudeEA", FILE_COMMON);
+      int h = FileOpen("ClaudeEA\\inputs.csv", FILE_READ | FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ | FILE_SHARE_WRITE, '\t');
+      if(h == INVALID_HANDLE)
+         return;
+      if(FileSize(h) == 0)
+         FileWrite(h, "run_time", "build", "symbol", "from", "to", "criterion", "net_profit", "trades", "profit_factor", "max_dd_pct", "inputs");
+      FileSeek(h, 0, SEEK_END);
+      FileWrite(h, TimeToString(TimeLocal(), TIME_DATE | TIME_SECONDS), build, symbol, TimeToString(from, TIME_DATE),
+                TimeToString(to, TIME_DATE), DoubleToString(score, 4), DoubleToString(TesterStatistics(STAT_PROFIT), 2),
+                (int)TesterStatistics(STAT_TRADES), DoubleToString(CTesterCriterion::ProfitFactor(), 3),
+                DoubleToString(TesterStatistics(STAT_EQUITY_DDREL_PERCENT), 2), inputs);
+      FileClose(h);
+     }
+
    //--- one row per pass: prop-firm consistency view (per reference day)
    static void       WriteConsistency(const string symbol, const ENUM_TIMEFRAMES tf, const datetime from, const datetime to,
                                       const int preset, const string build, const string config, const SDailyStats &d)

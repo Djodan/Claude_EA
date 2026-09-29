@@ -35,7 +35,7 @@
 //|  text, so a whole multi-pair portfolio lives in one .set file.   |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.54"
+#define EA_VERSION "4.55"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -365,6 +365,8 @@ input bool               InpExportTrades  = true;           // Export trade list
 
 input group "=== Prop rules (v4.54) ==="
 input int                InpFlatHour      = 0;              // Flat daily at this ref hour, ALL strategies (0 = off; futures props: 23 = 16:00 New York)
+
+#include "Modules/Core/InputsDump.mqh"   // generated (Research/gen_inputs_dump.py): every input for inputs.csv
 
 //--- Globals --------------------------------------------------------
 SEAConfig        g_cfg;                 // inputs + preset; each engine holds a copy with its symbol overrides
@@ -1655,6 +1657,7 @@ double OnTester()
       CTestReporter::WriteSummary(label, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, score);
       for(int e = 0; e < ArraySize(g_engines); e++)
          CTestReporter::WriteStrategyStats(g_engines[e].symbol, (ENUM_TIMEFRAMES)_Period, (int)InpPreset, build, config, InpMagic, g_stratNames);
+      CTestReporter::WriteInputs(label, g_testStart, TimeCurrent(), build, score, InputsDump());   // exact inputs of this pass
      }
    if(InpExportTrades && !MQLInfoInteger(MQL_OPTIMIZATION))
       for(int e = 0; e < ArraySize(g_engines); e++)

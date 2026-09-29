@@ -904,3 +904,17 @@ Start values = the baseline set (a single run reproduces it); v4.54, all new inp
 - `Round37_1k2_Optimize` (40 inputs) = Round31 (36) + second (overnight) scalp window, MR regime TF, ATR length,
   longer cooldown. $1k, min 150 trades.
 Both: XAUUSD M1, 2026.01.01–2026.09.21, 1-min OHLC, fast genetic, Custom max; verify top passes on real ticks + 2025.
+**Round 35 results (MnQ_14H_Results.xml, 10,330 passes):** run on 2026.01.01–2026.09.25 with forward = last third
+(from ~2026.06.28), NOT the planned 2025–2026 / forward 2026.05.01; bars were still the 0.50-pt version (import script not
+re-run after the cost change). Converged cluster: all engines on, S1 DJ Trend M15 HMA16, scalps M10 (MO TP 0.7R),
+S2 range 06–07, S4 NY 15:30/5-min. Back strong, forward weak: cluster forward PF median 1.03, 5,002/10,330 forward > 0.
+Best forward passes ≈ +$4–5k in 3 months PF 1.3–1.4 DD ~1.5%, worst trade 0.17–0.35%, best day 8–18%.
+⚠️ **Forward-tab XML parameters are unreliable:** for the same pass (identical forward criterion) the XML parameter
+columns disagreed with the EA's own config log on 30–50% of rows (B TF, S2 range start, S3 on/off, scalper risk...);
+Pass column blank. Config summaries are not unique either (don't pair back/forward rows by config text).
+**v4.55:** OnTester writes `Common\Files\ClaudeEA\inputs.csv` (tab-separated): run_time, build, symbol, from, to,
+criterion, net_profit, trades, PF, DD, and ALL 243 inputs as `InpX=v;...` (generated `Modules/Core/InputsDump.mqh` via
+`Research/gen_inputs_dump.py`; make_set.py warns when it is stale). `Research/set_from_inputs.py <Name> --criterion X
+[--from ...]` rebuilds the exact .set of any pass. Candidate sets from the XML were deleted.
+**Round 36** = Round35 set unchanged, run correctly: re-import NAS100_CONT (1.00-pt costs), 2025.01.01–2026.09.25,
+forward 2026.05.01.
