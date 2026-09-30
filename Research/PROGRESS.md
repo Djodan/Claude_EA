@@ -923,3 +923,18 @@ forward 2026.05.01.
 engines / unused TP modes). Forward (Jul–Sep 2026, 0.50-pt costs): A +5,113 PF 1.34 DD 1.58% 383 tr (T+B+N+MR+MO+P, M6/M10);
 B +4,520 PF 1.40 DD 1.57% 295 tr; C +2,524 PF 1.52 DD 0.92% 115 tr (T+B+MO M20+P H3). Single-test them with the
 1.00-pt data on 2025.01.01–2026.09.25 for the realistic yield.
+
+## Round 36 (run as New_MnQ_Results.xml) – NAS100_CONT, 1.00-pt costs, v4.55
+Tester dates again 2026 only: back 2026.01.01–06.30, forward 06.30–09.28 (2025 untouched). 12,800 genetic passes, 2.5 h.
+⚠️ **Forward phase broken:** 8,214/8,215 forward passes had 0 trades. At 13:45 the agents synced only 714 KB of NAS100_CONT
+history (4.3 MB in the back phase) and logged "forward passes not processed and returned to task queue" – custom-symbol
+cache after the 12:12 re-import. Tip: after re-importing a custom symbol, delete Tester\cache or run one single test
+first; for custom symbols validate with single tests instead of the tester's forward mode.
+Back results valid (8,273 passes, exact inputs in inputs.csv): 4,147 pass PF ≥ 1.3, ≥ 100 trades, worst ≤ 0.8%, best
+day ≤ 40%. Top cluster = **S8 momentum scalp M6** (body ≥ 0.6 ATR, close in outer 35%, stop at candle extreme, TP 1.9R,
+no trend filter, window 03/04–16 ref, EOD 17–20): ~+$5.2k in 6 months on $50k, PF 1.8–1.9, DD 1.1%, ~170 trades, worst
+0.3–0.5%, best day 30–33%. Other engines barely trade (1% open-risk cap is taken by the scalp).
+**Round37_NAS_MO_1/2/3** = the 3 best distinct passes (set_from_inputs.py, v4.55 exact inputs). Validate with single
+tests on 2025.01.01–2026.09.25 (2025 + Jul–Sep 2026 = out of sample).
+set_from_inputs.py: plain tab parsing (csv module merged lines on '"'), --first picks the fewest-engines row when
+identical results have different (unused) inputs.
