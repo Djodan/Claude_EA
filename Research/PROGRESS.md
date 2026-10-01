@@ -959,3 +959,12 @@ it. Config: `FLIP[... repeat: N doubles, avg d/double, OPEN|ended BUST]`. Flip10
 **Flip100_Static vs Flip100_Compound** (both repeat on, 20%, target ×2 milestones, bust 10% of last milestone):
 Static = account-size cap $100 → every trade risks ~$20 forever (base = min(balance, equity, $100)); Compound = cap off →
 20% of the current balance. Flip100_Compound = Flip100_Repeat.
+
+## Round 38 – Flip100 all day (more trades, every hour gold is open)
+Flip100_Static only trades 07–22 ref, waits for the 01–09 Asian range (AlignAsian) and only in its break direction,
+blocks ±30 min around news, and needs rare triggers (BB 3.0σ + ADX ≤ 20, impulse ≥ 1 ATR closing in the top 10%).
+- `Flip100_AllDay` = Flip100_Static, window 01:00–23:00 ref (gold's daily break ≈ 23:59–01:00), EOD 23, Asian bias off,
+  news ±15 min. Same signals → shows the effect of the hours alone.
+- `Flip100_AllDay_Fast` = + looser triggers: M3, BB 2.0σ, ADX ≤ 30, impulse ≥ 0.8 ATR closing in the top 25%.
+- `Round38_Flip100_AllDay_Optimize`: hours fixed all day, 21 signal inputs, min 600 trades (≈ 3/day), TC_PROFIT_DD_PCT.
+Earlier evidence: more trades = lower PF (R19: 600 tr PF 1.27, 800 PF 1.16); Asian bias was the scalper's main edge.
