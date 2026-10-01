@@ -35,7 +35,7 @@
 //|  text, so a whole multi-pair portfolio lives in one .set file.   |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.56"
+#define EA_VERSION "4.57"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -370,6 +370,7 @@ input group "=== Flip challenge (v4.56) ==="
 input double             InpFlipTarget    = 0;              // Stop for good once equity = start x this (2 = double; 0 = off)
 input double             InpFlipBust      = 0;              // Stop for good once equity <= this % of start (0 = off)
 input int                InpFlipStartWeek = 0;              // Tester trials: start trading N weeks after the test start (optimise 0..N)
+input bool               InpFlipRepeat    = false;          // Keep flipping: after a double bank the profit and start again (tester: withdraw profit / re-deposit after a bust)
 
 #include "Modules/Core/InputsDump.mqh"   // generated (Research/gen_inputs_dump.py): every input for inputs.csv
 
@@ -381,7 +382,10 @@ CProfile        *g_prof = NULL;
 double           g_flipStart = 0.0;     // balance when the flip attempt started
 datetime         g_flipBegin = 0;       // when it started
 string           g_flipResult = "";     // "" running, else "DOUBLED"/"BUST" (+ time)
-datetime         g_flipEnd = 0;         // profile of the symbol being configured (NULL = inputs only)
+datetime         g_flipEnd = 0;
+int              g_flipWins = 0, g_flipBusts = 0;   // repeat mode: finished flips
+double           g_flipDays = 0.0;                  // repeat mode: days of the finished doubles
+double           g_flipBanked = 0.0;                // repeat mode: profit withdrawn after doubles         // profile of the symbol being configured (NULL = inputs only)
 string           g_symbolIssue = "";    // problems in the Symbols input (dashboard)
 CChartDrawer     g_drawer;
 CDashboard       g_dashboard;
@@ -436,8 +440,37 @@ bool FlipAllows(void)
       return true;
    g_flipEnd = TimeCurrent();
    FlipCloseAll();
-   PrintFormat("FLIP: %s - equity %.2f from %.2f in %.1f days", g_flipResult, eq, g_flipStart, (g_flipEnd - g_flipBegin) / 86400.0);
-   return false;
+   double days = (g_flipEnd - g_flipBegin) / 86400.0;
+   PrintFormat("FLIP: %s - equity %.2f from %.2f in %.1f days", g_flipResult, eq, g_flipStart, days);
+   if(!InpFlipRepeat)
+      return false;
+   //--- repeat: bank the profit (or refill after a bust) and start the next flip with the same stake
+   bool tester = (bool)MQLInfoInteger(MQL_TESTER);
+   double bal = AccountInfoDouble(ACCOUNT_BALANCE);
+   if(g_flipResult == "DOUBLED")
+     {
+      g_flipWins++;
+      g_flipDays += days;
+      double profit = bal - g_flipStart;
+      if(tester && profit > 0.0 && TesterWithdrawal(profit))
+         g_flipBanked += profit;
+     }
+   else
+     {
+      g_flipBusts++;
+      if(!tester)
+        {
+         g_flipResult = "BUST";                     // live: no automatic refill - stop for good
+         return false;
+        }
+      TesterDeposit(g_flipStart - bal);
+     }
+   PrintFormat("FLIP: %d doubled / %d bust so far - next flip starts with %.2f", g_flipWins, g_flipBusts,
+               AccountInfoDouble(ACCOUNT_BALANCE));
+   g_flipResult = "";
+   g_flipStart  = AccountInfoDouble(ACCOUNT_BALANCE);   // live: compounding (the stake is the new balance)
+   g_flipBegin  = TimeCurrent();
+   return false;                                      // trade again from the next tick
   }
 
 string FlipSummary(void)
@@ -446,6 +479,10 @@ string FlipSummary(void)
       return "";
    string res = g_flipStart <= 0.0 ? "NOT STARTED" : (g_flipResult == "" ? "OPEN" : g_flipResult);
    double days = g_flipStart <= 0.0 ? 0.0 : ((g_flipResult == "" ? TimeCurrent() : g_flipEnd) - g_flipBegin) / 86400.0;
+   if(InpFlipRepeat)
+      return StringFormat(" FLIP[x%.1f bust%.0f%% wk%d repeat: %d doubled %d bust, avg %.1fd/double, banked %.2f, open %s]",
+                          InpFlipTarget, InpFlipBust, InpFlipStartWeek, g_flipWins, g_flipBusts,
+                          g_flipWins > 0 ? g_flipDays / g_flipWins : 0.0, g_flipBanked, res);
    return StringFormat(" FLIP[x%.1f bust%.0f%% wk%d: %s %.1fd]", InpFlipTarget, InpFlipBust, InpFlipStartWeek, res, days);
   }
 

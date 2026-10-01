@@ -948,3 +948,8 @@ STARTED d.d days]`. Base = New1_1k_1 scalper (proven $1k → $13.2k), cap off, d
 - `Flip100_Trials`: 36 start weeks × scalper risk 10/15/20/25% = 144 passes (slow complete, 1-min OHLC, $100) →
   success rate (net ≥ +100) and days to double per risk level.
 $100 notes: min lot 0.01 = $1 per $1 move; scalper stops $1.5–6.6 → ok from ~7% risk; margin caps risk ≈ 25% at 1:500.
+**Flip100_Aggressive result:** $100 → $200 on **Jan 29** (≈ 4 weeks), then stopped by design (single flip).
+**v4.57 – `InpFlipRepeat`:** after a double the profit is withdrawn (TesterWithdrawal) and a new $100 flip starts; after a
+bust $100 is re-deposited and it tries again (live: compounding after doubles, stops after a bust). Config ends with
+`FLIP[... repeat: N doubled M bust, avg d/double, banked $, open ...]`. Set `Flip100_Repeat` = 20% risk, repeat on
+(run real ticks, $100, full period). Aggressive/Trials regenerated (repeat off).
