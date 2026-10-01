@@ -8,7 +8,7 @@
 #ifndef CLAUDE_INPUTSDUMP_MQH
 #define CLAUDE_INPUTSDUMP_MQH
 
-#define INPUTS_DUMP_COUNT 243
+#define INPUTS_DUMP_COUNT 246
 
 //--- strings may contain ';' or tabs (symbol overrides, pair settings): keep the dump parseable
 string DumpText(const string v)
@@ -265,6 +265,9 @@ string InputsDump(void)
    s += "InpReportResults=" + (InpReportResults ? "true" : "false") + ";";
    s += "InpExportTrades=" + (InpExportTrades ? "true" : "false") + ";";
    s += "InpFlatHour=" + IntegerToString((long)InpFlatHour) + ";";
+   s += "InpFlipTarget=" + DoubleToString(InpFlipTarget, 8) + ";";
+   s += "InpFlipBust=" + DoubleToString(InpFlipBust, 8) + ";";
+   s += "InpFlipStartWeek=" + IntegerToString((long)InpFlipStartWeek) + ";";
    return s;
   }
 

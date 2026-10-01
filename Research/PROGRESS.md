@@ -938,3 +938,13 @@ no trend filter, window 03/04–16 ref, EOD 17–20): ~+$5.2k in 6 months on $50
 tests on 2025.01.01–2026.09.25 (2025 + Jul–Sep 2026 = out of sample).
 set_from_inputs.py: plain tab parsing (csv module merged lines on '"'), --first picks the fewest-engines row when
 identical results have different (unused) inputs.
+
+## v4.56 – flip challenge ($100 → $200)
+Inputs at the end: `InpFlipTarget` (stop for good at start × N, 2 = double), `InpFlipBust` (stop for good at ≤ X% of
+start), `InpFlipStartWeek` (start N weeks after the test start → one independent attempt per pass). On target/bust all
+EA positions close and the EA stops. results/consistency config ends with ` FLIP[x2.0 bust10% wkN: DOUBLED|BUST|OPEN|NOT
+STARTED d.d days]`. Base = New1_1k_1 scalper (proven $1k → $13.2k), cap off, daily limits off.
+- `Flip100_Aggressive`: $100, scalper 20% risk, target ×2, bust 10%, from Jan 1 (single run, real ticks).
+- `Flip100_Trials`: 36 start weeks × scalper risk 10/15/20/25% = 144 passes (slow complete, 1-min OHLC, $100) →
+  success rate (net ≥ +100) and days to double per risk level.
+$100 notes: min lot 0.01 = $1 per $1 move; scalper stops $1.5–6.6 → ok from ~7% risk; margin caps risk ≈ 25% at 1:500.

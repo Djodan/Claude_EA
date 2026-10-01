@@ -35,7 +35,7 @@
 //|  text, so a whole multi-pair portfolio lives in one .set file.   |
 //+------------------------------------------------------------------+
 #property copyright "DjoDan Maviaki"
-#define EA_VERSION "4.55"
+#define EA_VERSION "4.56"
 #define EA_BUILD   TimeToString(__DATETIME__, TIME_DATE | TIME_MINUTES)   // compile time, shown in journal/dashboard/results
 #property version   EA_VERSION
 #property description "XAUUSD scalper (mean reversion + momentum bursts, London/NY sessions) plus Asian-breakout (best_2026 preset), prop-firm guards."
@@ -366,13 +366,22 @@ input bool               InpExportTrades  = true;           // Export trade list
 input group "=== Prop rules (v4.54) ==="
 input int                InpFlatHour      = 0;              // Flat daily at this ref hour, ALL strategies (0 = off; futures props: 23 = 16:00 New York)
 
+input group "=== Flip challenge (v4.56) ==="
+input double             InpFlipTarget    = 0;              // Stop for good once equity = start x this (2 = double; 0 = off)
+input double             InpFlipBust      = 0;              // Stop for good once equity <= this % of start (0 = off)
+input int                InpFlipStartWeek = 0;              // Tester trials: start trading N weeks after the test start (optimise 0..N)
+
 #include "Modules/Core/InputsDump.mqh"   // generated (Research/gen_inputs_dump.py): every input for inputs.csv
 
 //--- Globals --------------------------------------------------------
 SEAConfig        g_cfg;                 // inputs + preset; each engine holds a copy with its symbol overrides
 CSymbolEngine   *g_engines[];           // one engine per traded symbol
 CSymbolEngine   *g_eng = NULL;          // engine being built (used by the Build* functions)
-CProfile        *g_prof = NULL;         // profile of the symbol being configured (NULL = inputs only)
+CProfile        *g_prof = NULL;
+double           g_flipStart = 0.0;     // balance when the flip attempt started
+datetime         g_flipBegin = 0;       // when it started
+string           g_flipResult = "";     // "" running, else "DOUBLED"/"BUST" (+ time)
+datetime         g_flipEnd = 0;         // profile of the symbol being configured (NULL = inputs only)
 string           g_symbolIssue = "";    // problems in the Symbols input (dashboard)
 CChartDrawer     g_drawer;
 CDashboard       g_dashboard;
@@ -387,6 +396,58 @@ double PD(const string k, const double v) { return g_prof == NULL ? v : g_prof.D
 long   PL(const string k, const long v)   { return g_prof == NULL ? v : g_prof.L(k, v); }
 bool   PB(const string k, const bool v)   { return g_prof == NULL ? v : g_prof.B(k, v); }
 string PS(const string k, const string v) { return g_prof == NULL ? v : g_prof.S(k, v); }
+
+//--- flip challenge: trade from the start week until equity hits the target or the bust level, then stop for good
+bool FlipOn(void) { return InpFlipTarget > 0.0 || InpFlipBust > 0.0 || InpFlipStartWeek > 0; }
+
+void FlipCloseAll(void)
+  {
+   CTrade t;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      ulong mg = (ulong)PositionGetInteger(POSITION_MAGIC);
+      if(ticket != 0 && mg >= InpMagic && mg < InpMagic + 100)
+         t.PositionClose(ticket);
+     }
+  }
+
+//--- false = do not trade on this tick (not started yet, or the challenge is over)
+bool FlipAllows(void)
+  {
+   if(!FlipOn())
+      return true;
+   if(g_flipResult != "")
+      return false;
+   if(g_flipStart <= 0.0)
+     {
+      if(TimeCurrent() < g_testStart + (datetime)InpFlipStartWeek * 7 * 86400)
+         return false;
+      g_flipStart = AccountInfoDouble(ACCOUNT_BALANCE);
+      g_flipBegin = TimeCurrent();
+      PrintFormat("FLIP: started with %.2f (target x%.2f, bust %.0f%%)", g_flipStart, InpFlipTarget, InpFlipBust);
+     }
+   double eq = AccountInfoDouble(ACCOUNT_EQUITY);
+   if(InpFlipTarget > 0.0 && eq >= g_flipStart * InpFlipTarget)
+      g_flipResult = "DOUBLED";
+   else if(InpFlipBust > 0.0 && eq <= g_flipStart * InpFlipBust / 100.0)
+      g_flipResult = "BUST";
+   if(g_flipResult == "")
+      return true;
+   g_flipEnd = TimeCurrent();
+   FlipCloseAll();
+   PrintFormat("FLIP: %s - equity %.2f from %.2f in %.1f days", g_flipResult, eq, g_flipStart, (g_flipEnd - g_flipBegin) / 86400.0);
+   return false;
+  }
+
+string FlipSummary(void)
+  {
+   if(!FlipOn())
+      return "";
+   string res = g_flipStart <= 0.0 ? "NOT STARTED" : (g_flipResult == "" ? "OPEN" : g_flipResult);
+   double days = g_flipStart <= 0.0 ? 0.0 : ((g_flipResult == "" ? TimeCurrent() : g_flipEnd) - g_flipBegin) / 86400.0;
+   return StringFormat(" FLIP[x%.1f bust%.0f%% wk%d: %s %.1fd]", InpFlipTarget, InpFlipBust, InpFlipStartWeek, res, days);
+  }
 
 string SymbolsLabel(const string sep)
   {
@@ -1602,7 +1663,8 @@ bool ProcessEngines(void)
 //--- live multi-symbol: other symbols can tick while the chart symbol is quiet
 void OnTimer()
   {
-   ProcessEngines();
+   if(FlipAllows())
+      ProcessEngines();
   }
 
 //+------------------------------------------------------------------+
@@ -1616,7 +1678,7 @@ void OnTick()
       ExportCalendar(InpNewsFrom, TimeCurrent() + 21 * 86400);
       g_lastExport = TimeCurrent();
      }
-   bool anyFired = ProcessEngines();
+   bool anyFired = FlipAllows() ? ProcessEngines() : false;
 
    // history may have been unavailable at attach time (e.g. tester start)
    static bool historyDrawn = false;
@@ -1652,6 +1714,7 @@ double OnTester()
          for(int e = 0; e < ArraySize(g_engines); e++)
             config += (e > 0 ? " | " : "") + g_engines[e].symbol + "{" + ConfigSummary(g_engines[e].cfg) + "}";
         }
+      config += FlipSummary();
       string label  = SymbolsLabel("+");
       CTestReporter::WriteConsistency(label, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, daily);
       CTestReporter::WriteSummary(label, (ENUM_TIMEFRAMES)_Period, g_testStart, TimeCurrent(), (int)InpPreset, build, config, score);
