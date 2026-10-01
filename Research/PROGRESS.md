@@ -953,3 +953,6 @@ $100 notes: min lot 0.01 = $1 per $1 move; scalper stops $1.5–6.6 → ok from 
 bust $100 is re-deposited and it tries again (live: compounding after doubles, stops after a bust). Config ends with
 `FLIP[... repeat: N doubled M bust, avg d/double, banked $, open ...]`. Set `Flip100_Repeat` = 20% risk, repeat on
 (run real ticks, $100, full period). Aggressive/Trials regenerated (repeat off).
+**v4.58 – repeat mode = pure compounding (user: no withdrawals):** after each double the next target is 2× the new
+balance; positions stay open, risk stays 20% of the growing balance. A bust (equity ≤ 10% of the last double level) ends
+it. Config: `FLIP[... repeat: N doubles, avg d/double, OPEN|ended BUST]`. Flip100_Repeat regenerated.
