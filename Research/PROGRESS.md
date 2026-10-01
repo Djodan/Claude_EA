@@ -956,3 +956,6 @@ bust $100 is re-deposited and it tries again (live: compounding after doubles, s
 **v4.58 – repeat mode = pure compounding (user: no withdrawals):** after each double the next target is 2× the new
 balance; positions stay open, risk stays 20% of the growing balance. A bust (equity ≤ 10% of the last double level) ends
 it. Config: `FLIP[... repeat: N doubles, avg d/double, OPEN|ended BUST]`. Flip100_Repeat regenerated.
+**Flip100_Static vs Flip100_Compound** (both repeat on, 20%, target ×2 milestones, bust 10% of last milestone):
+Static = account-size cap $100 → every trade risks ~$20 forever (base = min(balance, equity, $100)); Compound = cap off →
+20% of the current balance. Flip100_Compound = Flip100_Repeat.
