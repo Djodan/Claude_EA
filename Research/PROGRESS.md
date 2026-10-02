@@ -981,3 +981,16 @@ Run elsewhere (not in the local EA logs), back tab only, 2026.01.01–09.24/28.
 Sets (New1 base + pass values, flip inputs off): `Round39_1k2_Best`, `Round39_PropHigh_Best` (0.60/0.80 as optimised),
 `Round39_PropHigh_Safe` (same, risk 0.45/0.70 so the worst trade stays ≤ 0.8%). Verify on real ticks + 2025 before use:
 the 1k2 run was on an H1 chart (modelling unknown) and M4–M5 scalps are where 1-min OHLC is optimistic.
+
+## Round 37 results (VPS, 1-min OHLC) → Round 39 real-tick candidates
+Test_2.xml = Round37_PropHigh (62 inputs, 9,135 passes) · Test_1.xml = Round37_1k2 (40 inputs, 11,744 passes).
+**Prop High:** best +241.6k PF 1.78 DD 4.5% (custom 53.7k vs baseline 17.1k) but at swing 0.6% / scalper 0.8% (> 0.8% worst).
+Best prop-sized pass (swing ≤ 0.45, scalper ≤ 0.7): **+129.2k PF 1.78 DD 3.39%, 890 trades** (2× the baseline +64.6k).
+Consensus: **S1 Trend ON in all top 300** (M5 EMA 80, buffer 0.2–0.5, SL 3–4 ATR, vol ≥ 1.0 – now WITH weekend close),
+S2 range 01–07, buffer 0.35, TP 4R, BE 1.25R, EOD 22, news exit 20, no trend filter; S3 M10 60/175, SL 1 ATR, TP 5.5 ATR;
+momentum scalper on (body 2 ATR, TP 1.1R), MR mostly off; spread ≤ 0.3; day stop 2%; news entry window 0/0.
+Matched pairs: S2 stop MID never chosen here (0/300). With news ±30 the best is only +98k PF 1.59 DD 7.3%.
+**1k_2:** best $1k → $159.9k PF 1.89 DD 34% but exactly 150 trades (= the min) – fragile: ≥ 200 tr → +90.8k PF 1.62,
+≥ 250 tr → PF 1.31 DD 58%. Consensus: MR only (preset 12; MO worse 25/25 pairs), M4, 08/09–19 ref, risk 8%, Asian bias off,
+day target 15% / loss 25%, BB 25/2.5, RSI 9 10/65, news 60 min before.
+Round 39 (single real-tick runs): PropHigh_A (pass 7537 as is) · PropHigh_B (+ news ±30) · 1k2_A (pass 11736) · 1k2_B (pass 11585, 213 tr).
