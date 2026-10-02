@@ -968,3 +968,16 @@ blocks ±30 min around news, and needs rare triggers (BB 3.0σ + ADX ≤ 20, imp
 - `Flip100_AllDay_Fast` = + looser triggers: M3, BB 2.0σ, ADX ≤ 30, impulse ≥ 0.8 ATR closing in the top 25%.
 - `Round38_Flip100_AllDay_Optimize`: hours fixed all day, 21 signal inputs, min 600 trades (≈ 3/day), TC_PROFIT_DD_PCT.
 Earlier evidence: more trades = lower PF (R19: 600 tr PF 1.27, 800 PF 1.16); Asian bias was the scalper's main edge.
+
+## Round 39 – user optimisations of New1_1k_2 (Test_1.xml) and New1_Prop_High_Risk (Test_2.xml)
+Run elsewhere (not in the local EA logs), back tab only, 2026.01.01–09.24/28.
+- **Test_1 = 1k_2** (XAUUSD H1 chart, 40 inputs, 11,744 passes, 6,916 profitable): best **#11736 +$158.9k from $1k,
+  PF 1.89, DD 34.3%, 150 trades, criterion 4,631** (baseline New1_1k_2: +36.3k PF 1.29 DD 36.5%, ≈ 1,057). Mean reversion
+  only (preset 12), M4, BB 25/2.5, RSI 9 10/65, max ADX 30, risk 8%, day target 15% / loss 25%, window 08–19 (+08–12),
+  Asian bias OFF, no time exit, spread ≤ 0.5. Top 100 all M4.
+- **Test_2 = Prop High** (XAUUSD M1, 62 inputs, 9,135 passes): best **#7979 +$241.6k on $100k, PF 1.78, DD 4.50%,
+  1,150 trades, criterion 53,705** (baseline +64.6k PF 1.64 DD 3.78%, ≈ 17,100). T M5 + B M5 + P M10 (SL 1.0 ATR) +
+  MO M5; risk 0.60 / 0.80 (top of the ranges), day stop 2%, spread ≤ 0.3. Top 100: TBPK / TBPMK.
+Sets (New1 base + pass values, flip inputs off): `Round39_1k2_Best`, `Round39_PropHigh_Best` (0.60/0.80 as optimised),
+`Round39_PropHigh_Safe` (same, risk 0.45/0.70 so the worst trade stays ≤ 0.8%). Verify on real ticks + 2025 before use:
+the 1k2 run was on an H1 chart (modelling unknown) and M4–M5 scalps are where 1-min OHLC is optimistic.
